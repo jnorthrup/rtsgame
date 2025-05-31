@@ -1,0 +1,199 @@
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+    font-family: 'Courier New', monospace;
+    cursor: crosshair;
+}
+
+#gameCanvas {
+    display: block;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+}
+
+#ui {
+    position: absolute;
+    color: #0ff;
+    font-size: 12px;
+    text-shadow: 0 0 3px #000;
+}
+
+#topBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: rgba(0,0,0,0.8);
+    border-bottom: 2px solid #0ff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+}
+
+#minimap {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    width: 200px;
+    height: 200px;
+    border: 2px solid #0ff;
+    background: rgba(0,0,0,0.8);
+}
+
+#controls {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0,0,0,0.8);
+    border: 2px solid #0ff;
+    padding: 10px;
+    max-width: 300px;
+}
+
+#eventLog {
+    position: absolute;
+    top: 50px;
+    left: 10px;
+    width: 300px;
+    height: 200px;
+    background: rgba(0,0,0,0.8);
+    border: 2px solid #0ff;
+    padding: 10px;
+    overflow-y: auto;
+    font-size: 11px;
+}
+
+.event {
+    margin: 2px 0;
+    padding: 2px;
+    animation: fadeIn 0.5s;
+}
+
+.event-battle { color: #f88; }
+.event-build { color: #8f8; }
+.event-resource { color: #ff8; }
+.event-strategic { color: #88f; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.unit-button {
+    background: rgba(0,100,200,0.5);
+    border: 1px solid #0ff;
+    color: #fff;
+    padding: 5px 10px;
+    margin: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.unit-button:hover {
+    background: rgba(0,150,255,0.8);
+    box-shadow: 0 0 10px #0ff;
+}
+
+.team-red { color: #f44; }
+.team-blue { color: #44f; }
+
+#statusWindow {
+    position: absolute;
+    bottom: 220px;
+    right: 10px;
+    width: 300px;
+    background: rgba(0,0,0,0.8);
+    border: 2px solid #0ff;
+    padding: 10px;
+    font-size: 11px;
+    display: none;
+}
+
+#statusWindow h3 {
+    margin: 0 0 10px 0;
+    color: #0ff;
+}
+
+.status-line {
+    margin: 3px 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.status-label {
+    color: #8ff;
+}
+
+.status-value {
+    color: #fff;
+}
+
+#introspection {
+    position: absolute;
+    background: rgba(0,20,40,0.95);
+    border: 1px solid #0ff;
+    padding: 8px;
+    font-size: 10px;
+    pointer-events: none;
+    display: none;
+    min-width: 200px;
+    box-shadow: 0 0 20px rgba(0,255,255,0.3);
+}
+
+.intro-header {
+    color: #0ff;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.intro-line {
+    margin: 2px 0;
+    color: #8ff;
+}
+
+.intro-value {
+    color: #fff;
+}
+
+.health-bar {
+    height: 4px;
+    background: #333;
+    margin: 3px 0;
+}
+
+.health-fill {
+    height: 100%;
+    background: #0f0;
+    transition: width 0.3s;
+}
+
+.shield-bar {
+    height: 4px;
+    background: #333;
+    margin: 3px 0;
+}
+
+.shield-fill {
+    height: 100%;
+    background: #0ff;
+}
+
+#resourceBar {
+    position: absolute;
+    top: 50px;
+    right: 220px;
+    background: rgba(0,0,0,0.8);
+    border: 2px solid #0ff;
+    padding: 10px;
+    min-width: 200px;
+}
+
+.resource-display {
+    display: flex;
+    justify-content: space-between;
+    margin: 5px 0;
+}
