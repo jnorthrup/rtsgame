@@ -1,3 +1,4 @@
+ 
 import { startGame } from './gameLoop.js';
 
 // Wait for the DOM to be fully loaded before trying to access canvas elements
@@ -32,3 +33,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+ 

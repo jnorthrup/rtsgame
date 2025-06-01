@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supreme Commander RTS</title>
+    <title>Supreme Commander RTS</title> 
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
 
-    <div id="ui">
+     <div id="ui">
         <div id="topBar">
             <div>
                 <span class="team-blue">BLUE: <span id="blueUnits">0</span> units | Commander: <span id="blueCommander">100%</span></span>
@@ -20,13 +20,12 @@
             <div>
                 <span class="team-red">RED: <span id="redUnits">0</span> units | Commander: <span id="redCommander">100%</span></span>
             </div>
-        </div>
-
+        </div> 
+ 
         <div id="eventLog">
             <h3 style="margin: 0 0 10px 0;">Battle Events</h3>
             <div id="events"></div>
-        </div>
-
+        </div> 
         <div id="resourceBar">
             <h3 style="margin: 0 0 10px 0;">Resources</h3>
             <div class="resource-display">
@@ -45,10 +44,10 @@
                 <span class="team-red">Red Energy:</span>
                 <span id="redEnergy">1000</span>
             </div>
-        </div>
+        </div> 
 
         <canvas id="minimap"></canvas>
-
+ 
         <div id="controls">
             <h3>Controls</h3>
             <p>Mouse Wheel: Zoom (0.1x - 1000x)</p>
@@ -57,21 +56,19 @@
             <p>C: Auto Camera (follow action)</p>
             <p>Space: Pause/Resume</p>
             <p>R: Restart Battle</p>
-        </div>
-
+        </div> 
         <div id="fpvMode">
             <h3>First Person View</h3>
             <p>ESC to exit</p>
-        </div>
-
+        </div> 
         <div id="statusWindow">
             <h3>Status Report</h3>
             <div id="statusContent"></div>
-        </div>
-
+        </div> 
         <div id="introspection"></div>
     </div>
 
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
+ 
