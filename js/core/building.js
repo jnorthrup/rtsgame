@@ -138,26 +138,10 @@ class Building {
                 size * (this.productionProgress / this.productionQueue[0].buildTime), 3);
         }
 
-        // Commander indicator (Note: Commander is a Unit now, this might be legacy or for a building commander)
-        // If BUILDING_TYPES.commander still exists and is used, this is relevant.
-        if (this.type === BUILDING_TYPES.commander) { // Check against imported BUILDING_TYPES
-            ctx.strokeStyle = '#ff0';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size * 0.7, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Commander shield (if applicable to a building commander)
-            if (this.shields > 0) {
-                ctx.strokeStyle = '#0ff';
-                ctx.globalAlpha = 0.5;
-                ctx.lineWidth = 5;
-                ctx.beginPath();
-                ctx.arc(screenX, screenY, size * 0.9, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.globalAlpha = 1;
-            }
-        }
+        // Commander indicator (Note: Commander is a Unit, defined in UNIT_TYPES.commander)
+        // The check for BUILDING_TYPES.commander was removed as it's undefined.
+        // If a specific "Command Center" building type is added later, its drawing logic would go here,
+        // referencing its own type from BUILDING_TYPES.
     }
 }
 

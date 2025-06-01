@@ -27,6 +27,33 @@ class Unit {
         this.formation = null;
         this.captionCooldown = 0;
         this.constructionTask = null; // Specific for ACU/Engineer type units
+        if (this.type.grenadeAbility) {
+            this.grenadeCooldown = 0;
+        }
+    }
+
+    getCurrentSpeed(gameContext) {
+        const { terrain } = gameContext;
+        // Ensure TILE_SIZE, GRID_SIZE, TERRAIN_TYPES are accessible,
+        // they are imported at the top of the file.
+
+        const tileX = Math.floor(this.x / TILE_SIZE);
+        const tileY = Math.floor(this.y / TILE_SIZE);
+
+        if (tileX >= 0 && tileX < GRID_SIZE && tileY >= 0 && tileY < GRID_SIZE &&
+            terrain[tileX] && terrain[tileX][tileY] !== undefined) {
+            const terrainType = terrain[tileX][tileY];
+
+            if (this.type.movementType === 'amphibious') {
+                if (terrainType === TERRAIN_TYPES.WATER && typeof this.type.speedWater === 'number') {
+                    return this.type.speedWater;
+                } else if (terrainType === TERRAIN_TYPES.LAND && typeof this.type.speedLand === 'number') {
+                    return this.type.speedLand;
+                }
+            }
+        }
+        // Fallback to default speed
+        return this.type.speed;
     }
 
     update(gameContext) {
@@ -99,8 +126,9 @@ class Unit {
 
             if (dist > this.type.range) {
                 this.angle = Math.atan2(dy, dx);
-                this.vx = Math.cos(this.angle) * this.type.speed;
-                this.vy = Math.sin(this.angle) * this.type.speed;
+                const currentSpeed = this.getCurrentSpeed(gameContext);
+                this.vx = Math.cos(this.angle) * currentSpeed;
+                this.vy = Math.sin(this.angle) * currentSpeed;
             } else {
                 this.vx = 0;
                 this.vy = 0;
@@ -122,17 +150,76 @@ class Unit {
             if (Math.random() < 0.02) {
                 this.angle += (Math.random() - 0.5) * 0.5;
             }
-            this.vx = Math.cos(this.angle) * this.type.speed * 0.5;
-            this.vy = Math.sin(this.angle) * this.type.speed * 0.5;
+            const currentSpeed = this.getCurrentSpeed(gameContext);
+            this.vx = Math.cos(this.angle) * currentSpeed * 0.5;
+            this.vy = Math.sin(this.angle) * currentSpeed * 0.5;
         }
 
         this.applyMovement(gameContext);
 
         if (this.cooldown > 0) this.cooldown--;
+        if (this.type.grenadeAbility && this.grenadeCooldown > 0) {
+            this.grenadeCooldown--;
+        }
         if (this.captionCooldown > 0) this.captionCooldown--;
 
         if (this.captionCooldown <= 0 && Math.random() < 0.01) {
             this.showStateCaption(gameContext);
+        }
+    }
+
+    launchGrenade(targetX, targetY, gameContext) {
+        // UNIT_TYPES is imported at the top of the file.
+        // Ensure GrenadeProjectile constructor will be available via gameContext.
+        // We'll assume gameContext.GrenadeProjectile and gameContext.projectiles will exist.
+        const { GrenadeProjectile, projectiles, addEvent } = gameContext;
+
+        if (!this.type.grenadeAbility) {
+            console.warn(`${this.type.name} does not have grenade ability.`);
+            return;
+        }
+
+        if (this.grenadeCooldown > 0) {
+            console.log(`${this.type.name} grenade is on cooldown: ${this.grenadeCooldown} frames left.`);
+            if (addEvent) addEvent(gameContext, 'ui_error', 'Grenade ability on cooldown!', 1);
+            return;
+        }
+
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > this.type.grenadeAbility.range) {
+            console.log(`Target out of grenade range. Max: ${this.type.grenadeAbility.range}, Target: ${dist.toFixed(0)}`);
+            if (addEvent) addEvent(gameContext, 'ui_error', 'Target out of grenade range!', 1);
+            return;
+        }
+
+        if (!GrenadeProjectile) {
+            console.error("GrenadeProjectile class is not available on gameContext!");
+            return;
+        }
+        if (!projectiles) {
+            console.error("gameContext.projectiles array is not available!");
+            return;
+        }
+
+        console.log(`${this.team} ${this.type.name} launching grenade at ${targetX.toFixed(0)}, ${targetY.toFixed(0)}`);
+
+        const projectile = new GrenadeProjectile(
+            this.x, this.y, // startX, startY
+            targetX, targetY,
+            this.team,
+            this.type.grenadeAbility // Pass the whole ability config
+            // gameContext is no longer passed directly to projectile constructor based on typical entity design
+            // The projectile's update method will receive gameContext.
+        );
+        projectiles.push(projectile);
+
+        this.grenadeCooldown = this.type.grenadeAbility.cooldownTime;
+
+        if (addEvent) { // Add a game event for the launch
+            addEvent(gameContext, 'ability_used', `${this.type.name} launched grenade.`, 2, { x: this.x, y: this.y });
         }
     }
 
@@ -265,8 +352,9 @@ class Unit {
 
         if (dist > moveThreshold) {
             this.angle = Math.atan2(dy, dx);
-            this.vx = Math.cos(this.angle) * this.type.speed;
-            this.vy = Math.sin(this.angle) * this.type.speed;
+            const currentSpeed = this.getCurrentSpeed(gameContext);
+            this.vx = Math.cos(this.angle) * currentSpeed;
+            this.vy = Math.sin(this.angle) * currentSpeed;
         } else {
             this.vx = 0;
             this.vy = 0;
@@ -336,8 +424,9 @@ class Unit {
             if (building.team !== this.team && building.hp > 0) {
                 const dist = this.getDistance(building);
                 let priority = 1.0;
-                 if (building.type === BUILDING_TYPES.commander) priority = 0.6; // Prioritize enemy commander building (if any)
-                else if (building.type.resourceGeneration) priority = 0.8;
+                 // BUILDING_TYPES.commander does not exist; commanders are units.
+                 // TODO: Review logic for commander-specific building interaction if a special "command center" building type is added later.
+                if (building.type.resourceGeneration) priority = 0.8;
                 else if (building.type.produces) priority = 0.9;
 
                 const adjustedDist = dist * priority;
@@ -408,7 +497,8 @@ class Unit {
 
         effects.push(new EffectConstructor(this.x, this.y, target.x, target.y, this.type.effectColor));
 
-        if (target.type && (target.type === UNIT_TYPES.commander || target.type === BUILDING_TYPES.commander) && Math.random() < 0.1) {
+        // Check if target is a unit commander. BUILDING_TYPES.commander is not a valid check here.
+        if (target.type && target.type === UNIT_TYPES.commander && Math.random() < 0.1) {
             const event = addEvent(gameContext, 'battle', `${this.team.toUpperCase()} attacking enemy Commander!`, 3, { x: target.x, y: target.y });
         } else if (Math.random() < 0.01 && target.type && target.type.tier >= 2) {
             const event = addEvent(gameContext, 'battle', `Major engagement: ${this.type.name} vs ${target.type.name}`, 2, { x: this.x, y: this.y });

@@ -4,7 +4,7 @@ import { WORLD_SIZE } from '../config/gameConstants.js'; // WORLD_SIZE is used i
 
 export function initInputHandling(gameContext) {
     // Destructure what's needed from gameContext for convenience
-    const { canvas, minimap, camera, gameState, units, initGame, addEvent } = gameContext;
+    const { canvas, minimap, camera, gameState, units, initGame, addEvent, UNIT_TYPES } = gameContext;
 
     let mouseDown = false;
     let lastMouseX = 0;
@@ -13,6 +13,25 @@ export function initInputHandling(gameContext) {
     // --- Canvas Event Listeners (Mouse for selection, panning) ---
     if (canvas) {
         canvas.addEventListener('mousedown', (e) => {
+            if (gameState.aimingGrenade) {
+                if (e.button === 0) { // Left click
+                    const worldX = (e.clientX - camera.canvasWidth / 2) / camera.zoom + camera.x;
+                    const worldY = (e.clientY - camera.canvasHeight / 2) / camera.zoom + camera.y;
+
+                    if (gameState.selectedUnit && typeof gameState.selectedUnit.launchGrenade === 'function') {
+                        gameState.selectedUnit.launchGrenade(worldX, worldY, gameContext);
+                    }
+                    console.log(`Grenade targeted at ${worldX.toFixed(0)}, ${worldY.toFixed(0)}`);
+                    gameState.aimingGrenade = false;
+                } else if (e.button === 2) { // Right click to cancel
+                    gameState.aimingGrenade = false;
+                    console.log("Grenade aiming cancelled by Right Click.");
+                }
+                e.preventDefault(); // Prevent other actions like panning/selection
+                e.stopPropagation(); // Stop event from bubbling further
+                return; // Important to stop further processing of this click
+            }
+
             mouseDown = true;
             lastMouseX = e.clientX;
             lastMouseY = e.clientY;
@@ -99,8 +118,28 @@ export function initInputHandling(gameContext) {
                     addEvent(gameContext, 'strategic', 'Auto-camera enabled', 1); // addEvent is from gameContext
                 }
                 break;
+            case 'g':
+                if (gameState.selectedUnit &&
+                    gameState.selectedUnit.type === UNIT_TYPES.commander && // Check if selected is Commander
+                    (gameState.selectedUnit.grenadeCooldown === undefined || gameState.selectedUnit.grenadeCooldown <= 0)) { // Check cooldown (assume 0 or undefined if ready)
+                    gameState.aimingGrenade = true;
+                    // TODO: Add visual feedback for aiming mode (e.g., cursor change)
+                    console.log("Grenade aiming activated.");
+                } else if (gameState.aimingGrenade) {
+                    gameState.aimingGrenade = false; // Pressing G again cancels
+                    console.log("Grenade aiming cancelled by G.");
+                }
+                break;
+            case 'tab':
+                e.preventDefault(); // Prevent default browser focus shifting and scrolling
+                // console.log("Tab key pressed and default behavior prevented."); // Optional: for testing
+                break;
             case 'escape':
                 gameState.fpvMode = false;
+                if (gameState.aimingGrenade) {
+                    gameState.aimingGrenade = false;
+                    console.log("Grenade aiming cancelled by Escape.");
+                }
                 break;
         }
     });
@@ -111,7 +150,7 @@ export function initInputHandling(gameContext) {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             camera.canvasWidth = canvas.width;
-            camera.canvasHeight = canvas.height;
+            camera.canvasHeight = canvas.height; // CORRECTED
             // Note: The actual rendering update due to resize happens in the next gameLoop call.
         }
     });

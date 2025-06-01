@@ -67,15 +67,12 @@ function drawMinimap(gameContext) {
         const my = (building.y / WORLD_SIZE) * 200;
         minimapCtx.fillRect(mx - 2, my - 2, 4, 4);
 
-        // Highlight ACU (which is a unit) or old Commander building type
-        if (building.type === BUILDING_TYPES.commander) { // Legacy commander building
-             minimapCtx.strokeStyle = '#ff0';
-             minimapCtx.strokeRect(mx - 3, my - 3, 6, 6);
-        }
+        // The check for building.type === BUILDING_TYPES.commander was removed here.
+        // Commanders are units (UNIT_TYPES.commander) and are highlighted in the loop below.
     }
-    // Highlight ACUs (units) on minimap separately if needed
+    // Highlight ACUs (units) on minimap
      for (const unit of units) {
-        if (unit.type === UNIT_TYPES.commander) {
+        if (unit.type === UNIT_TYPES.commander) { // UNIT_TYPES.commander is defined
             minimapCtx.strokeStyle = unit.team === 'blue' ? '#00f' : '#f00'; // Team specific commander highlight
             minimapCtx.lineWidth = 1; // thinner line for unit commander
             const mx = (unit.x / WORLD_SIZE) * 200;
@@ -164,6 +161,13 @@ export function render(gameContext) {
 
     for (const effect of effects) {
         effect.draw(ctx, camera);
+    }
+
+    // Draw projectiles
+    if (gameContext.projectiles) { // Ensure projectiles array exists
+        for (const projectile of gameContext.projectiles) {
+            projectile.draw(ctx, camera); // Assuming projectile.draw takes ctx and camera
+        }
     }
 
     for (const caption of captions) {
