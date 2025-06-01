@@ -30,6 +30,14 @@ class Unit {
         if (this.type.grenadeAbility) {
             this.grenadeCooldown = 0;
         }
+        this.stuckFrames = 0;
+        this.significantMoveThreshold = (this.type.size / 4) || 2.5; // Min distance in world units
+        this.lastPositionForStuckCheck = { x: this.x, y: this.y };
+        this.isEscaping = false;
+        this.escapeAngle = 0;
+        this.escapeDuration = 0;
+        this.STUCK_FRAMES_THRESHOLD = 30;
+        this.ESCAPE_MODE_DURATION_FRAMES = 60;
     }
 
     getCurrentSpeed(gameContext) {
@@ -81,79 +89,109 @@ class Unit {
                  // Default movement/targeting if not busy with a specific support task
                  this.defaultMovementAndTargeting(gameContext);
             }
-            return; // Support units might have different main loop logic
+            // Support units like Shield Generator still need stuck detection if they move.
+            // ACU and Engineer might be stationary during construction/repair,
+            // but if they get stuck moving to a site, this is useful.
+            // So, call updateStuckDetection for all units after their main logic.
+        } else {
+            this.defaultMovementAndTargeting(gameContext);
         }
 
-        this.defaultMovementAndTargeting(gameContext);
+        this.updateStuckDetection(gameContext); // Called for all units after movement attempt
     }
 
     defaultMovementAndTargeting(gameContext) {
         const { units, buildings } = gameContext;
 
-        // Combat behavior with dynamic objectives
-        if (!this.target || this.target.hp <= 0 ||
-            (Date.now() - this.lastTargetSwitch > 5000 && Math.random() < 0.1)) {
-            this.findTarget(gameContext);
-            this.lastTargetSwitch = Date.now();
-        }
-
-        // Patrol or raid behavior
-        if (Math.random() < 0.005 && !this.target) { // Only look for patrol if no current combat target
-            if (this.aggressiveness > 0.7) {
-                const enemyCommanderUnit = units.find(u => u.team !== this.team && u.type === UNIT_TYPES.commander);
-                if (enemyCommanderUnit) {
-                    this.patrolTarget = { x: enemyCommanderUnit.x + (Math.random() - 0.5) * 500, y: enemyCommanderUnit.y + (Math.random() - 0.5) * 500 };
-                }
-            } else if (this.aggressiveness < 0.3) {
-                const friendlyCommanderUnit = units.find(u => u.team === this.team && u.type === UNIT_TYPES.commander);
-                if (friendlyCommanderUnit) {
-                    this.patrolTarget = { x: friendlyCommanderUnit.x + (Math.random() - 0.5) * 300, y: friendlyCommanderUnit.y + (Math.random() - 0.5) * 300 };
-                }
-            } else {
-                if (gameContext.resourceNodes && gameContext.resourceNodes.length > 0) {
-                    const targetNode = gameContext.resourceNodes[Math.floor(Math.random() * gameContext.resourceNodes.length)];
-                    if (targetNode) {
-                        this.patrolTarget = { x: targetNode.x, y: targetNode.y };
-                    }
-                }
-            }
-        }
-
-        if (this.target) {
-            const dx = this.target.x - this.x;
-            const dy = this.target.y - this.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist > this.type.range) {
-                this.angle = Math.atan2(dy, dx);
+        if (this.isEscaping) {
+            if (this.escapeDuration > 0) {
+                this.angle = this.escapeAngle; // Maintain escape angle
                 const currentSpeed = this.getCurrentSpeed(gameContext);
                 this.vx = Math.cos(this.angle) * currentSpeed;
                 this.vy = Math.sin(this.angle) * currentSpeed;
+                this.escapeDuration--;
             } else {
-                this.vx = 0;
-                this.vy = 0;
-                if (this.cooldown <= 0) {
-                    this.attack(this.target, gameContext);
-                    this.cooldown = this.type.attackSpeed;
+                this.isEscaping = false; // Escape duration finished
+                this.stuckFrames = 0; // Reset stuck counter
+            }
+        }
+
+        if (!this.isEscaping) { // Only set new target-based movement if not actively escaping
+            // Combat behavior with dynamic objectives
+            if (!this.target || this.target.hp <= 0 ||
+                (Date.now() - this.lastTargetSwitch > 5000 && Math.random() < 0.1)) {
+                this.findTarget(gameContext);
+                this.lastTargetSwitch = Date.now();
+            }
+
+            // Patrol or raid behavior
+            if (Math.random() < 0.005 && !this.target) { // Only look for patrol if no current combat target
+                if (this.aggressiveness > 0.7) {
+                    const enemyCommanderUnit = units.find(u => u.team !== this.team && u.type === UNIT_TYPES.commander);
+                    if (enemyCommanderUnit) {
+                        this.patrolTarget = { x: enemyCommanderUnit.x + (Math.random() - 0.5) * 500, y: enemyCommanderUnit.y + (Math.random() - 0.5) * 500 };
+                    }
+                } else if (this.aggressiveness < 0.3) {
+                    const friendlyCommanderUnit = units.find(u => u.team === this.team && u.type === UNIT_TYPES.commander);
+                    if (friendlyCommanderUnit) {
+                        this.patrolTarget = { x: friendlyCommanderUnit.x + (Math.random() - 0.5) * 300, y: friendlyCommanderUnit.y + (Math.random() - 0.5) * 300 };
+                    }
+                } else {
+                    if (gameContext.resourceNodes && gameContext.resourceNodes.length > 0) {
+                        const targetNode = gameContext.resourceNodes[Math.floor(Math.random() * gameContext.resourceNodes.length)];
+                        if (targetNode) {
+                            this.patrolTarget = { x: targetNode.x, y: targetNode.y };
+                        }
+                    }
                 }
             }
-        } else if (this.patrolTarget) {
-            this.moveTowards(this.patrolTarget, gameContext);
-             const dxPatrol = this.patrolTarget.x - this.x;
-             const dyPatrol = this.patrolTarget.y - this.y;
-             const distPatrol = Math.sqrt(dxPatrol * dxPatrol + dyPatrol * dyPatrol);
-             if (distPatrol <= 50) { // Reached patrol point
-                 this.patrolTarget = null;
-             }
-        } else {
-            // Wander behavior
-            if (Math.random() < 0.02) {
-                this.angle += (Math.random() - 0.5) * 0.5;
+
+            if (this.target) {
+                const dx = this.target.x - this.x;
+                const dy = this.target.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist > this.type.range) {
+                    this.angle = Math.atan2(dy, dx);
+                    const currentSpeed = this.getCurrentSpeed(gameContext);
+                    this.vx = Math.cos(this.angle) * currentSpeed;
+                    this.vy = Math.sin(this.angle) * currentSpeed;
+                } else {
+                    this.vx = 0;
+                    this.vy = 0;
+                    if (this.cooldown <= 0) {
+                        this.attack(this.target, gameContext);
+                        this.cooldown = this.type.attackSpeed;
+                    }
+                }
+            } else if (this.patrolTarget) {
+                const dxPatrol = this.patrolTarget.x - this.x;
+                const dyPatrol = this.patrolTarget.y - this.y;
+                const distPatrol = Math.sqrt(dxPatrol * dxPatrol + dyPatrol * dyPatrol);
+                const moveThreshold = 50;
+
+                if (distPatrol > moveThreshold) {
+                    this.angle = Math.atan2(dyPatrol, dxPatrol);
+                    const currentSpeed = this.getCurrentSpeed(gameContext);
+                    this.vx = Math.cos(this.angle) * currentSpeed;
+                    this.vy = Math.sin(this.angle) * currentSpeed;
+                } else {
+                    this.vx = 0;
+                    this.vy = 0;
+                }
+                 if (distPatrol <= 50) {
+                     this.patrolTarget = null;
+                 }
+            } else {
+                // Wander behavior
+                if (Math.random() < 0.02) {
+                    this.angle += (Math.random() - 0.5) * 0.5;
+                }
+                const currentSpeed = this.getCurrentSpeed(gameContext);
+                this.vx = Math.cos(this.angle) * currentSpeed * 0.5;
+                this.vy = Math.sin(this.angle) * currentSpeed * 0.5;
             }
-            const currentSpeed = this.getCurrentSpeed(gameContext);
-            this.vx = Math.cos(this.angle) * currentSpeed * 0.5;
-            this.vy = Math.sin(this.angle) * currentSpeed * 0.5;
-        }
+        } // End of if(!this.isEscaping)
 
         this.applyMovement(gameContext);
 
@@ -393,10 +431,140 @@ class Unit {
             this.x = boundedX;
             this.y = boundedY;
         } else {
-            // If stuck, try to turn slightly to find a new path (simple obstacle avoidance)
-            this.angle += Math.PI / 4; // Turn 45 degrees
-            this.vx = 0; // Stop forward momentum to avoid getting stuck in a loop against a wall
+            // Preserve the unit's original velocity components if needed, or recalculate.
+            // For simplicity, we'll use the current angle and speed to probe.
+            // const originalVx = this.vx;
+            // const originalVy = this.vy;
+
+            const probeAngles = [Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2];
+            const currentSpeed = this.getCurrentSpeed(gameContext); // Use current speed for probing
+
+            for (const probeAngle of probeAngles) {
+                const potentialAngle = this.angle + probeAngle;
+                const probeDist = currentSpeed > 0 ? currentSpeed : TILE_SIZE / 2; // Use speed or a small fixed distance
+
+                const probeX = this.x + Math.cos(potentialAngle) * probeDist;
+                const probeY = this.y + Math.sin(potentialAngle) * probeDist;
+
+                const probeTileX = Math.floor(probeX / TILE_SIZE);
+                const probeTileY = Math.floor(probeY / TILE_SIZE);
+
+                let isProbePathClear = false;
+                if (probeTileX >= 0 && probeTileX < GRID_SIZE && probeTileY >= 0 && probeTileY < GRID_SIZE &&
+                    terrain[probeTileX] && terrain[probeTileX][probeTileY] !== undefined) {
+                    const terrainTypeProbe = terrain[probeTileX][probeTileY];
+                    if (this.type.movementType === 'amphibious') {
+                        if (terrainTypeProbe === TERRAIN_TYPES.LAND || terrainTypeProbe === TERRAIN_TYPES.WATER) {
+                            isProbePathClear = true;
+                        }
+                    } else if ((this.type.domain === 'land' && terrainTypeProbe !== TERRAIN_TYPES.WATER) ||
+                               (this.type.domain === 'sea' && terrainTypeProbe === TERRAIN_TYPES.WATER) ||
+                               (this.type.domain === 'air')) {
+                        isProbePathClear = true;
+                    }
+                }
+
+                if (isProbePathClear) {
+                    this.angle = potentialAngle;
+                    this.vx = Math.cos(this.angle) * currentSpeed;
+                    this.vy = Math.sin(this.angle) * currentSpeed;
+
+                    // Move a small step in the new direction
+                    // Ensure the small step doesn't immediately put it into another obstacle
+                    const stepFactor = 0.5; // Adjust this factor as needed
+                    const nextStepX = this.x + this.vx * stepFactor;
+                    const nextStepY = this.y + this.vy * stepFactor;
+
+                    const nextStepTileX = Math.floor(nextStepX / TILE_SIZE);
+                    const nextStepTileY = Math.floor(nextStepY / TILE_SIZE);
+
+                    let canTakeSmallStep = false;
+                     if (nextStepTileX >= 0 && nextStepTileX < GRID_SIZE && nextStepTileY >= 0 && nextStepTileY < GRID_SIZE &&
+                        terrain[nextStepTileX] && terrain[nextStepTileX][nextStepTileY] !== undefined) {
+                        const nextStepTerrainType = terrain[nextStepTileX][nextStepTileY];
+                        if (this.type.movementType === 'amphibious') {
+                            if (nextStepTerrainType === TERRAIN_TYPES.LAND || nextStepTerrainType === TERRAIN_TYPES.WATER) {
+                                canTakeSmallStep = true;
+                            }
+                        } else if ((this.type.domain === 'land' && nextStepTerrainType !== TERRAIN_TYPES.WATER) ||
+                                   (this.type.domain === 'sea' && nextStepTerrainType === TERRAIN_TYPES.WATER) ||
+                                   (this.type.domain === 'air')) {
+                            canTakeSmallStep = true;
+                        }
+                    }
+
+                    if(canTakeSmallStep) {
+                        this.x = Math.max(0, Math.min(WORLD_SIZE, nextStepX));
+                        this.y = Math.max(0, Math.min(WORLD_SIZE, nextStepY));
+                    } else {
+                        // If even the small step is blocked, just update angle and velocity,
+                        // hoping the main movement logic in the next frame resolves it.
+                        // Or, could revert to original angle and try another probe.
+                        // For now, just set vx/vy to 0 if small step fails.
+                        this.vx = 0;
+                        this.vy = 0;
+                    }
+                    return; // Exit applyMovement after finding a new path and making a small move
+                }
+            }
+
+            // If no probe angle found a clear path, stop momentum
+            this.vx = 0;
             this.vy = 0;
+            // Optional: this.angle += Math.PI; // Turn 180 degrees if completely stuck
+        }
+
+        // --- Unit-to-unit separation ---
+        const allUnits = gameContext.units; // Get all units from gameContext
+        const SEPARATION_STRENGTH = 0.2; // How strongly they push each other, adjust as needed
+        const MIN_UNIT_BUFFER = this.type.size * 0.25; // A small buffer based on unit size, e.g., 25% of its own size
+
+        for (const otherUnit of allUnits) {
+            if (this === otherUnit) {
+                continue; // Skip self
+            }
+
+            const dx = this.x - otherUnit.x;
+            const dy = this.y - otherUnit.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Define minimum separation based on both units' sizes
+            // Assuming type.size is a diameter-like property
+            const desiredSeparation = (this.type.size / 2) + (otherUnit.type.size / 2) + MIN_UNIT_BUFFER;
+
+            if (distance < desiredSeparation) {
+                const overlap = desiredSeparation - distance;
+
+                // Avoid division by zero if distance is very small (units are exactly on top)
+                // In such a case, apply a minimal random push or just push along x-axis.
+                let pushX = 0;
+                let pushY = 0;
+
+                if (distance > 0.01) { // If units are not exactly on top of each other
+                    pushX = (dx / distance) * overlap * SEPARATION_STRENGTH;
+                    pushY = (dy / distance) * overlap * SEPARATION_STRENGTH;
+                } else { // Units are too close or on top, apply a default small push
+                    pushX = (Math.random() - 0.5) * SEPARATION_STRENGTH * overlap; // Small random push
+                    pushY = (Math.random() - 0.5) * SEPARATION_STRENGTH * overlap;
+                     if (pushX === 0 && pushY === 0) pushX = SEPARATION_STRENGTH * overlap; // Ensure some push if random is zero
+                }
+
+                // Apply the separation push to current unit's position
+                let newX = this.x + pushX;
+                let newY = this.y + pushY;
+
+                // Check against world boundaries (WORLD_SIZE is imported)
+                this.x = Math.max(0, Math.min(WORLD_SIZE, newX));
+                this.y = Math.max(0, Math.min(WORLD_SIZE, newY));
+
+                // IMPORTANT: This is a simple model. Ideally, the push should also be
+                // applied to otherUnit (or half to each). For simplicity in this pass,
+                // only the current unit is moved. This can lead to one unit pushing others
+                // more effectively depending on update order.
+                // Also, this separation does not re-check for terrain collisions after push,
+                // so units could be pushed into impassable terrain. This is a known limitation
+                // of this simpler approach.
+            }
         }
     }
 
@@ -566,6 +734,36 @@ class Unit {
             ctx.strokeRect(-size / 2 - (5 * camera.zoom), -size / 2 - (5 * camera.zoom), size + (10 * camera.zoom), size + (10 * camera.zoom));
         }
         ctx.restore();
+    }
+
+    updateStuckDetection(gameContext) {
+        // Calculate distance moved this frame
+        const dxMoved = this.x - this.lastPositionForStuckCheck.x;
+        const dyMoved = this.y - this.lastPositionForStuckCheck.y;
+        const distanceMoved = Math.sqrt(dxMoved * dxMoved + dyMoved * dyMoved);
+
+        // Check if unit was trying to move
+        const wasTryingToMove = (this.target || this.patrolTarget || this.isEscaping || this.vx !== 0 || this.vy !== 0);
+
+        if (wasTryingToMove && distanceMoved < this.significantMoveThreshold) {
+            this.stuckFrames++;
+        } else {
+            this.stuckFrames = 0;
+        }
+
+        this.lastPositionForStuckCheck = { x: this.x, y: this.y };
+
+        if (this.stuckFrames > this.STUCK_FRAMES_THRESHOLD && !this.isEscaping) {
+            this.isEscaping = true;
+            this.escapeDuration = this.ESCAPE_MODE_DURATION_FRAMES;
+            // Determine escape angle:
+            this.escapeAngle = this.angle + (Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
+            this.escapeAngle += (Math.random() - 0.5) * (Math.PI / 4); // Add up to +/- 22.5 degrees
+
+            if (gameContext.addEvent) {
+                 gameContext.addEvent(gameContext, 'debug', `${this.type.name} stuck, trying escape. Angle: ${this.escapeAngle.toFixed(2)}`, 0, { x: this.x, y: this.y });
+            }
+        }
     }
 }
 
