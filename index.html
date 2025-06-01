@@ -455,6 +455,7 @@
                 this.aggressiveness = Math.random(); // 0-1, affects targeting behavior
                 this.formation = null;
                 this.captionCooldown = 0;
+                this.constructionTask = null; // Initialize construction task
             }
             
             update(units, buildings) {
@@ -568,7 +569,93 @@
             }
             
             performSupportRole(units, buildings) {
-                if (this.type.name === 'Engineer') {
+                if (this.type === UNIT_TYPES.commander) {
+                    // ACU Construction Logic
+                    if (!this.constructionTask && this.type.buildList && this.type.buildList.length > 0) {
+                        const buildingToBuildType = this.type.buildList[0]; // Try to build the first thing in the list
+
+                        if (buildingToBuildType && resources[this.team].mass >= buildingToBuildType.cost.mass &&
+                            resources[this.team].energy >= buildingToBuildType.cost.energy) {
+
+                            // Find build location (simplified)
+                            const buildOffsets = [
+                                { dx: 100, dy: 0 }, { dx: -100, dy: 0 },
+                                { dx: 0, dy: 100 }, { dx: 0, dy: -100 },
+                                { dx: 150, dy: 150 }, { dx: -150, dy: -150 }
+                            ];
+
+                            for (const offset of buildOffsets) {
+                                const buildX = this.x + offset.dx;
+                                const buildY = this.y + offset.dy;
+                                const tileX = Math.floor(buildX / TILE_SIZE);
+                                const tileY = Math.floor(buildY / TILE_SIZE);
+
+                                if (tileX >= 0 && tileX < GRID_SIZE && tileY >= 0 && tileY < GRID_SIZE &&
+                                    terrain[tileX][tileY] === TERRAIN_TYPES.LAND) {
+
+                                    let isSpotClear = true;
+                                    for (const b of buildings) {
+                                        const dist = Math.sqrt((b.x - buildX)**2 + (b.y - buildY)**2);
+                                        if (dist < (b.type.size / 2 + buildingToBuildType.size / 2)) {
+                                            isSpotClear = false;
+                                            break;
+                                        }
+                                    }
+
+                                    if (isSpotClear) {
+                                        this.constructionTask = {
+                                            targetX: buildX,
+                                            targetY: buildY,
+                                            type: buildingToBuildType,
+                                            progress: 0,
+                                            buildingStarted: false
+                                        };
+                                        console.log(`${this.team} ACU starting task to build ${buildingToBuildType.name} at ${buildX.toFixed(0)},${buildY.toFixed(0)}`);
+                                        break; // Found a spot
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (this.constructionTask) {
+                        if (!this.constructionTask.buildingStarted) {
+                            const targetPos = { x: this.constructionTask.targetX, y: this.constructionTask.targetY };
+                            const distToSite = this.getDistance(targetPos);
+                            const requiredDist = (this.constructionTask.type.size / 2) + (this.type.size / 2) + 20; // थोड़ा अतिरिक्त अंतर
+
+                            if (distToSite > requiredDist) {
+                                this.moveTowards(targetPos);
+                            } else {
+                                // Deduct resources & start
+                                resources[this.team].mass -= this.constructionTask.type.cost.mass;
+                                resources[this.team].energy -= this.constructionTask.type.cost.energy;
+                                this.constructionTask.buildingStarted = true;
+                                this.vx = 0; this.vy = 0; // Stop moving
+                                captions.push(new Caption(this.constructionTask.targetX, this.constructionTask.targetY, `Constructing ${this.constructionTask.type.name}`, '#0f0', 10));
+                                console.log(`${this.team} ACU arrived at site, starting construction of ${this.constructionTask.type.name}`);
+                            }
+                        } else {
+                            // Continue construction
+                            this.constructionTask.progress += (this.type.buildRate || 1.0);
+                             if (this.captionCooldown <= 0 && Math.random() < 0.05) { // Show progress less frequently
+                                const progressPercent = Math.floor((this.constructionTask.progress / this.constructionTask.type.buildTime) * 100);
+                                captions.push(new Caption(this.x, this.y - this.type.size -10, `Build: ${progressPercent}%`, '#FFF', 8));
+                                this.captionCooldown = 30;
+                            }
+
+
+                            if (this.constructionTask.progress >= this.constructionTask.type.buildTime) {
+                                const newBuilding = new Building(this.constructionTask.targetX, this.constructionTask.targetY, this.team, this.constructionTask.type);
+                                buildings.push(newBuilding);
+                                addEvent('build', `${this.team.toUpperCase()} ACU completed ${this.constructionTask.type.name}!`, 2);
+                                console.log(`${this.team} ACU completed ${this.constructionTask.type.name}`);
+                                this.constructionTask = null;
+                            }
+                        }
+                        return; // ACU is busy with construction, skip other support/combat logic
+                    }
+                } else if (this.type.name === 'Engineer') {
                     // Find damaged buildings or unoccupied resource nodes
                     let target = null;
                     let minDist = Infinity;
@@ -1252,18 +1339,29 @@
                 shields: 200,
                 shieldRegen: 5,
                 tier: 3
+            },
+            commander: {
+                name: 'Commander',
+                domain: 'land',
+                size: 18,
+                speed: 0.6,
+                maxHp: 1500,
+                damage: 75,
+                range: 180,
+                attackSpeed: 40,
+                color: '#ff0',
+                effectColor: '#f0f',
+                cost: { mass: 0, energy: 0 },
+                tier: 2.5,
+                support: true,
+                buildList: [], // Initialize as empty, will be populated after BUILDING_TYPES is defined
+                buildRate: 1.0,
+                shields: 200,
+                shieldRegen: 2
             }
         };
         
         const BUILDING_TYPES = {
-            commander: {
-                name: 'Commander',
-                size: 30,
-                maxHp: 1000,
-                produces: null,
-                color: '#ff0',
-                resourceGeneration: { type: 'mass', amount: 1 }
-            },
             landFactory: {
                 name: 'Land Factory',
                 size: 40,
@@ -1315,6 +1413,18 @@
                 cost: { mass: 30, energy: 20 }
             }
         };
+
+        // Post-definition population of commander buildList
+        if (UNIT_TYPES.commander) {
+            UNIT_TYPES.commander.buildList = [
+                BUILDING_TYPES.landFactory,
+                BUILDING_TYPES.massExtractor,
+                BUILDING_TYPES.energyExtractor
+                // Add other T1 buildings the commander should be able to build here
+            ];
+        } else {
+            console.error("Commander unit type not found for buildList population!");
+        }
         
         // Game entities
         let units = [];
@@ -1403,20 +1513,29 @@
                 redStart = { x: WORLD_SIZE * 0.8, y: WORLD_SIZE * 0.5 }; // Fallback
             }
             
-            // Place commanders
-            buildings.push(new Building(blueStart.x, blueStart.y, 'blue', BUILDING_TYPES.commander));
-            buildings.push(new Building(redStart.x, redStart.y, 'red', BUILDING_TYPES.commander));
+            // Spawn ACU units
+            if (UNIT_TYPES.commander) {
+                units.push(new Unit(blueStart.x, blueStart.y, 'blue', UNIT_TYPES.commander));
+                units.push(new Unit(redStart.x, redStart.y, 'red', UNIT_TYPES.commander));
+                addEvent('strategic', 'Commanders deployed!', 3);
+            } else {
+                console.error("UNIT_TYPES.commander is not defined! Cannot spawn ACUs.");
+            }
+
+            // Comment out old commander building spawning
+            // buildings.push(new Building(blueStart.x, blueStart.y, 'blue', BUILDING_TYPES.commander));
+            // buildings.push(new Building(redStart.x, redStart.y, 'red', BUILDING_TYPES.commander));
             
-            // Place initial factories
-            console.log("Placing initial factories...");
-            placeFactoriesAroundCommander(blueStart, 'blue');
-            placeFactoriesAroundCommander(redStart, 'red');
+            // Comment out initial factory placement
+            // console.log("Placing initial factories...");
+            // placeFactoriesAroundCommander(blueStart, 'blue');
+            // placeFactoriesAroundCommander(redStart, 'red');
             
-            // Add some initial engineers
-            units.push(new Unit(blueStart.x + 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
-            units.push(new Unit(blueStart.x - 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
-            units.push(new Unit(redStart.x + 50, redStart.y, 'red', UNIT_TYPES.engineer));
-            units.push(new Unit(redStart.x - 50, redStart.y, 'red', UNIT_TYPES.engineer));
+            // Comment out initial engineer spawning
+            // units.push(new Unit(blueStart.x + 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
+            // units.push(new Unit(blueStart.x - 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
+            // units.push(new Unit(redStart.x + 50, redStart.y, 'red', UNIT_TYPES.engineer));
+            // units.push(new Unit(redStart.x - 50, redStart.y, 'red', UNIT_TYPES.engineer));
             
             // Center camera
             camera.x = WORLD_SIZE / 2;
@@ -1570,11 +1689,20 @@
                 unit.update(units, buildings);
                 
                 if (unit.hp <= 0) {
-                    if (unit.type.tier >= 2) {
+                    // Check if the destroyed unit is an ACU
+                    if (unit.type === UNIT_TYPES.commander) {
+                        gameState.winner = unit.team === 'blue' ? 'RED' : 'BLUE';
+                        captions.push(new Caption(unit.x, unit.y, `${unit.team.toUpperCase()} COMMANDER DESTROYED!`, '#ff0', 20));
+                        const event = addEvent('strategic', `${gameState.winner} achieves victory! ${unit.team.toUpperCase()} ACU eliminated.`, 3);
+                        event.position = { x: unit.x, y: unit.y };
+                        // No need to splice here if the game ends, but if we want post-victory gameplay, keep splice.
+                        // For now, the main update loop will stop if gameState.winner is set.
+                    } else if (unit.type.tier >= 2) { // Log destruction of other significant units
                         const event = addEvent('battle', 
                             `${unit.team.toUpperCase()} ${unit.type.name} destroyed!`, 2);
                         event.position = { x: unit.x, y: unit.y };
                     }
+
                     units.splice(i, 1);
                     if (unit === gameState.selectedUnit) {
                         gameState.selectedUnit = null;
@@ -1920,8 +2048,8 @@
             document.getElementById('redUnits').textContent = redUnits;
             
             // Commander health
-            const blueCommander = buildings.find(b => b.team === 'blue' && b.type.name === 'Commander');
-            const redCommander = buildings.find(b => b.team === 'red' && b.type.name === 'Commander');
+            const blueCommander = units.find(u => u.team === 'blue' && u.type === UNIT_TYPES.commander);
+            const redCommander = units.find(u => u.team === 'red' && u.type === UNIT_TYPES.commander);
             
             document.getElementById('blueCommander').textContent = blueCommander ? 
                 Math.round(blueCommander.hp / blueCommander.maxHp * 100) + '%' : 'DESTROYED';
