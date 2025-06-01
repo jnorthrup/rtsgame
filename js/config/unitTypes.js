@@ -1,18 +1,4 @@
-// Game constants
-export const WORLD_SIZE = 5000;
-export const TILE_SIZE = 50;
-export const GRID_SIZE = WORLD_SIZE / TILE_SIZE;
-
-// Terrain generation related
-export const TERRAIN_TYPES = {
-    WATER: 0,
-    LAND: 1,
-    MOUNTAIN: 2
-};
-
-// Unit types
-export const UNIT_TYPES = {
-    // Land units
+const UNIT_TYPES = {
     tank: {
         name: 'Tank',
         domain: 'land',
@@ -58,7 +44,6 @@ export const UNIT_TYPES = {
         cost: { mass: 150, energy: 100 },
         tier: 2
     },
-    // Sea units
     battleship: {
         name: 'Battleship',
         domain: 'sea',
@@ -89,7 +74,6 @@ export const UNIT_TYPES = {
         cost: { mass: 120, energy: 80 },
         tier: 1
     },
-    // Air units
     fighter: {
         name: 'Fighter',
         domain: 'air',
@@ -135,7 +119,6 @@ export const UNIT_TYPES = {
         cost: { mass: 100, energy: 80 },
         tier: 1
     },
-    // Support units
     engineer: {
         name: 'Engineer',
         domain: 'land',
@@ -170,7 +153,6 @@ export const UNIT_TYPES = {
         shieldRegen: 2,
         tier: 2
     },
-    // T3 units
     experimental: {
         name: 'Experimental',
         domain: 'land',
@@ -187,66 +169,26 @@ export const UNIT_TYPES = {
         shields: 200,
         shieldRegen: 5,
         tier: 3
+    },
+    commander: { // ACU definition
+        name: 'Commander',
+        domain: 'land',
+        size: 18,
+        speed: 0.6,
+        maxHp: 1500,
+        damage: 75,
+        range: 180,
+        attackSpeed: 40,
+        color: '#ff0',
+        effectColor: '#f0f',
+        cost: { mass: 0, energy: 0 }, // Starting unit
+        tier: 2.5,
+        support: true,
+        buildList: [], // Populated dynamically in main.js after BUILDING_TYPES is loaded
+        buildRate: 1.0,
+        shields: 200,
+        shieldRegen: 2
     }
 };
 
-export const BUILDING_TYPES = {
-    commander: {
-        name: 'Commander',
-        size: 30,
-        maxHp: 1000,
-        produces: null,
-        color: '#ff0',
-        resourceGeneration: { type: 'mass', amount: 1 }
-    },
-    landFactory: {
-        name: 'Land Factory',
-        size: 40,
-        maxHp: 500,
-        produces: [UNIT_TYPES.tank, UNIT_TYPES.bot, UNIT_TYPES.artillery, UNIT_TYPES.engineer, UNIT_TYPES.shieldGenerator],
-        color: '#840',
-        cost: { mass: 200, energy: 100 }
-    },
-    advancedLandFactory: {
-        name: 'Advanced Land Factory',
-        size: 50,
-        maxHp: 700,
-        produces: [UNIT_TYPES.artillery, UNIT_TYPES.shieldGenerator, UNIT_TYPES.experimental],
-        color: '#a60',
-        cost: { mass: 400, energy: 300 }
-    },
-    airFactory: {
-        name: 'Air Factory',
-        size: 40,
-        maxHp: 400,
-        produces: [UNIT_TYPES.fighter, UNIT_TYPES.bomber, UNIT_TYPES.gunship],
-        color: '#888',
-        cost: { mass: 150, energy: 120 }
-    },
-    navalFactory: {
-        name: 'Naval Factory',
-        size: 50,
-        maxHp: 600,
-        produces: [UNIT_TYPES.battleship, UNIT_TYPES.submarine],
-        color: '#048',
-        cost: { mass: 250, energy: 150 }
-    },
-    massExtractor: {
-        name: 'Mass Extractor',
-        size: 20,
-        maxHp: 200,
-        produces: null,
-        color: '#888',
-        resourceGeneration: { type: 'mass', amount: 2 },
-        cost: { mass: 50, energy: 25 }
-    },
-    energyExtractor: {
-        name: 'Energy Plant',
-        size: 20,
-        maxHp: 150,
-        produces: null,
-        color: '#ff0',
-        resourceGeneration: { type: 'energy', amount: 3 },
-        cost: { mass: 30, energy: 20 }
-    }
-};
+export { UNIT_TYPES };
