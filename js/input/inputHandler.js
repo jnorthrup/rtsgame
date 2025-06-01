@@ -71,10 +71,10 @@ export function initInputHandling(gameContext) {
             if (!gameState.fpvMode) {
                 const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
                 camera.zoom *= zoomFactor;
-                camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom)); 
+                camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom));
             }
             // e.preventDefault(); // Prevent page scrolling - removed for passive listener
-        }, { passive: true }); // Added passive: true 
+        }, { passive: true }); // Added passive: true
     } else {
         console.error("Canvas element not found in gameContext for input handling.");
     }

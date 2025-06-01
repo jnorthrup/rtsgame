@@ -1,4 +1,3 @@
- 
 import { UNIT_TYPES } from './config/unitTypes.js';
 import { BUILDING_TYPES } from './config/buildingTypes.js';
 import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES, MIN_LAND_PERCENTAGE, MAX_TERRAIN_RETRIES } from './config/gameConstants.js';
@@ -129,4 +128,3 @@ function mainRequestAnimationFrameLoop(timestamp) {
 }
 
 requestAnimationFrame(mainRequestAnimationFrameLoop);
- 
