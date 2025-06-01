@@ -35,8 +35,8 @@ export function addEvent(type, message, importance = 1) {
     }
 
     // Set camera target for important events
-    if (importance >= 2 && camera.autoCamera && event.position) { // event.position must be set by caller
-        camera.cameraTarget = event.position;
+    if (importance >= 2 && camera.autoCamera && position) { // position is now passed directly
+        camera.cameraTarget = position;
         camera.cameraTimer = 180; // 3 seconds
     }
 
