@@ -331,26 +331,50 @@
             MOUNTAIN: 2
         };
         
-        function generateTerrain() {
+        const MIN_LAND_PERCENTAGE = 0.3;
+        const MAX_TERRAIN_RETRIES = 5;
+
+        function generateTerrain(retries = 0) {
             // Generate base terrain
             for (let x = 0; x < GRID_SIZE; x++) {
                 terrain[x] = [];
                 for (let y = 0; y < GRID_SIZE; y++) {
                     const noise1 = Math.sin(x * 0.05) * Math.cos(y * 0.05);
                     const noise2 = Math.sin(x * 0.1 + 100) * Math.cos(y * 0.1 + 100) * 0.5;
-                    const noise = noise1 + noise2 + Math.random() * 0.3;
+                    const noise = noise1 + noise2 + Math.random() * 0.1; // Reduced randomness
                     
-                    if (noise < -0.2) {
+                    if (noise < -0.1) { // Adjusted water threshold
                         terrain[x][y] = TERRAIN_TYPES.WATER;
-                    } else if (noise > 0.6) {
+                    } else if (noise > 0.7) { // Adjusted mountain threshold
                         terrain[x][y] = TERRAIN_TYPES.MOUNTAIN;
                     } else {
                         terrain[x][y] = TERRAIN_TYPES.LAND;
                     }
                 }
             }
+
+            // Check land area
+            let landTiles = 0;
+            for (let x = 0; x < GRID_SIZE; x++) {
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    if (terrain[x][y] === TERRAIN_TYPES.LAND) {
+                        landTiles++;
+                    }
+                }
+            }
+
+            const totalTiles = GRID_SIZE * GRID_SIZE;
+            const landPercentage = landTiles / totalTiles;
+
+            if (landPercentage < MIN_LAND_PERCENTAGE && retries < MAX_TERRAIN_RETRIES) {
+                console.log(`Land percentage ${landPercentage.toFixed(2)} is less than ${MIN_LAND_PERCENTAGE}. Regenerating terrain (attempt ${retries + 1}/${MAX_TERRAIN_RETRIES}).`);
+                return generateTerrain(retries + 1); // Recursive call
+            } else if (landPercentage < MIN_LAND_PERCENTAGE) {
+                console.warn(`Failed to achieve minimum land percentage after ${MAX_TERRAIN_RETRIES} attempts. Current land: ${landPercentage.toFixed(2)}`);
+            }
             
-            // Generate resource nodes
+            // Generate resource nodes (only if terrain generation is final)
+            resourceNodes.length = 0; // Clear previous nodes if any (important for regeneration)
             for (let i = 0; i < 30; i++) {
                 const x = Math.random() * WORLD_SIZE;
                 const y = Math.random() * WORLD_SIZE;
@@ -1348,16 +1372,43 @@
             resources.blue = { mass: 1000, energy: 1000, massIncome: 0, energyIncome: 0 };
             resources.red = { mass: 1000, energy: 1000, massIncome: 0, energyIncome: 0 };
             
-            generateTerrain();
+            let blueStart = null;
+            let redStart = null;
+            const MAX_INIT_RETRIES = 10; // Max retries for finding start positions
+            const COMMANDER_START_AREA_SIZE = 5; // Commanders need a 5x5 clear land area
+
+            console.log("Initializing game, attempting to generate terrain and find starting positions...");
+
+            for (let i = 0; i < MAX_INIT_RETRIES; i++) {
+                console.log(`Attempt ${i + 1}/${MAX_INIT_RETRIES} to generate terrain and find start spots.`);
+                generateTerrain(); // This function now handles its own land percentage retries
+
+                blueStart = findLandPosition(WORLD_SIZE * 0.2, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
+                redStart = findLandPosition(WORLD_SIZE * 0.8, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
+
+                if (blueStart && redStart) {
+                    console.log(`Successfully found starting positions for both teams after ${i + 1} attempt(s).`);
+                    break;
+                } else {
+                    console.warn(`Could not find suitable ${COMMANDER_START_AREA_SIZE}x${COMMANDER_START_AREA_SIZE} starting areas. Blue found: ${!!blueStart}, Red found: ${!!redStart}. Regenerating terrain...`);
+                }
+            }
+
+            if (!blueStart) {
+                console.error(`CRITICAL: Failed to find suitable starting position for BLUE team after ${MAX_INIT_RETRIES} attempts. Placing at default fallback.`);
+                blueStart = { x: WORLD_SIZE * 0.2, y: WORLD_SIZE * 0.5 }; // Fallback
+            }
+            if (!redStart) {
+                console.error(`CRITICAL: Failed to find suitable starting position for RED team after ${MAX_INIT_RETRIES} attempts. Placing at default fallback.`);
+                redStart = { x: WORLD_SIZE * 0.8, y: WORLD_SIZE * 0.5 }; // Fallback
+            }
             
             // Place commanders
-            const blueStart = findLandPosition(WORLD_SIZE * 0.2, WORLD_SIZE * 0.5);
-            const redStart = findLandPosition(WORLD_SIZE * 0.8, WORLD_SIZE * 0.5);
-            
             buildings.push(new Building(blueStart.x, blueStart.y, 'blue', BUILDING_TYPES.commander));
             buildings.push(new Building(redStart.x, redStart.y, 'red', BUILDING_TYPES.commander));
             
             // Place initial factories
+            console.log("Placing initial factories...");
             placeFactoriesAroundCommander(blueStart, 'blue');
             placeFactoriesAroundCommander(redStart, 'red');
             
@@ -1374,28 +1425,45 @@
             
             addEvent('strategic', 'Battle commenced!', 3);
         }
+
+        function isAreaClear(gridX, gridY, size, terrainType) {
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const x = gridX + i;
+                    const y = gridY + j;
+                    // Check bounds and terrain type
+                    if (x >= GRID_SIZE || y >= GRID_SIZE || !terrain[x] || terrain[x][y] === undefined || terrain[x][y] !== terrainType) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
         
-        function findLandPosition(targetX, targetY) {
-            let bestX = targetX;
-            let bestY = targetY;
+        function findLandPosition(targetX, targetY, minAreaSize = 3) {
+            let bestCandidate = null;
             let minDist = Infinity;
             
-            for (let x = 0; x < GRID_SIZE; x++) {
-                for (let y = 0; y < GRID_SIZE; y++) {
-                    if (terrain[x][y] === TERRAIN_TYPES.LAND) {
-                        const worldX = x * TILE_SIZE + TILE_SIZE / 2;
-                        const worldY = y * TILE_SIZE + TILE_SIZE / 2;
-                        const dist = Math.sqrt((worldX - targetX) ** 2 + (worldY - targetY) ** 2);
-                        if (dist < minDist) {
-                            minDist = dist;
-                            bestX = worldX;
-                            bestY = worldY;
+            for (let x = 0; x <= GRID_SIZE - minAreaSize; x++) { // Iterate to ensure area fits
+                for (let y = 0; y <= GRID_SIZE - minAreaSize; y++) { // Iterate to ensure area fits
+                    // Check the top-left tile first for efficiency
+                    if (terrain[x] && terrain[x][y] === TERRAIN_TYPES.LAND) {
+                        if (isAreaClear(x, y, minAreaSize, TERRAIN_TYPES.LAND)) {
+                            // Calculate the center of the found clear area
+                            const areaCenterX = (x + minAreaSize / 2) * TILE_SIZE;
+                            const areaCenterY = (y + minAreaSize / 2) * TILE_SIZE;
+
+                            const dist = Math.sqrt((areaCenterX - targetX) ** 2 + (areaCenterY - targetY) ** 2);
+
+                            if (dist < minDist) {
+                                minDist = dist;
+                                bestCandidate = { x: areaCenterX, y: areaCenterY };
+                            }
                         }
                     }
                 }
             }
-            
-            return { x: bestX, y: bestY };
+            return bestCandidate; // Returns null if no suitable area is found
         }
         
         function findWaterPosition(targetX, targetY) {
@@ -1422,25 +1490,47 @@
         }
         
         function placeFactoriesAroundCommander(commanderPos, team) {
-            const offset = 150;
-            
+            const offset = 150; // Preferred distance from commander for factories
+            const factoryAreaSize = 3; // Factories need a 3x3 clear land area
+            let landPos, airPos, navalPos, energyPos1;
+
             // Land factory
-            const landPos = findLandPosition(commanderPos.x + offset, commanderPos.y);
+            landPos = findLandPosition(commanderPos.x + offset, commanderPos.y, factoryAreaSize);
+            if (!landPos) landPos = findLandPosition(commanderPos.x - offset, commanderPos.y, factoryAreaSize); // Try other side
+            if (!landPos) {
+                console.warn(`Could not find ideal spot for Land Factory for ${team}, placing at fallback.`);
+                landPos = { x: commanderPos.x + offset, y: commanderPos.y };
+            }
             buildings.push(new Building(landPos.x, landPos.y, team, BUILDING_TYPES.landFactory));
             
             // Air factory
-            const airPos = findLandPosition(commanderPos.x - offset, commanderPos.y);
+            airPos = findLandPosition(commanderPos.x - offset, commanderPos.y - offset, factoryAreaSize); // Try diagonal
+            if (!airPos) airPos = findLandPosition(commanderPos.x + offset, commanderPos.y + offset, factoryAreaSize); // Try other diagonal
+            if (!airPos) {
+                console.warn(`Could not find ideal spot for Air Factory for ${team}, placing at fallback.`);
+                airPos = { x: commanderPos.x - offset, y: commanderPos.y - offset };
+            }
             buildings.push(new Building(airPos.x, airPos.y, team, BUILDING_TYPES.airFactory));
             
             // Naval factory (if water nearby)
-            const navalPos = findWaterPosition(commanderPos.x, commanderPos.y + offset);
-            const dist = Math.sqrt((navalPos.x - commanderPos.x) ** 2 + (navalPos.y - commanderPos.y) ** 2);
-            if (dist < 500) {
-                buildings.push(new Building(navalPos.x, navalPos.y, team, BUILDING_TYPES.navalFactory));
+            navalPos = findWaterPosition(commanderPos.x, commanderPos.y + offset * 1.5); // Place further out
+            if (navalPos && navalPos.x !== undefined && navalPos.y !== undefined) { // Check if a valid water position was found
+                 const distToCommander = Math.sqrt((navalPos.x - commanderPos.x) ** 2 + (navalPos.y - commanderPos.y) ** 2);
+                 if (distToCommander < 700) { // Ensure it's reasonably close
+                    buildings.push(new Building(navalPos.x, navalPos.y, team, BUILDING_TYPES.navalFactory));
+                 } else {
+                    console.log(`Naval factory position for ${team} was too far from commander (${distToCommander.toFixed(0)} units), skipping.`);
+                 }
+            } else {
+                console.log(`No suitable water position found for Naval factory for ${team}.`);
             }
             
             // Energy plants
-            const energyPos1 = findLandPosition(commanderPos.x, commanderPos.y - offset);
+            energyPos1 = findLandPosition(commanderPos.x, commanderPos.y - offset, factoryAreaSize);
+            if (!energyPos1) {
+                console.warn(`Could not find ideal spot for Energy Plant for ${team}, placing at fallback.`);
+                energyPos1 = { x: commanderPos.x, y: commanderPos.y - offset};
+            }
             buildings.push(new Building(energyPos1.x, energyPos1.y, team, BUILDING_TYPES.energyExtractor));
         }
         
