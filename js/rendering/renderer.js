@@ -159,8 +159,8 @@ export function render(gameContext) {
         building.draw(ctx, camera);
     }
 
-    for (const unit of units) {
-        unit.draw(ctx, camera, gameContext); // Pass gameContext
+    for (const unit of units) { 
+        unit.draw(ctx, camera, gameContext); // Pass gameContext 
     }
 
     for (const effect of effects) {

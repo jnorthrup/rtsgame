@@ -13,20 +13,20 @@
             font-family: 'Courier New', monospace;
             cursor: crosshair;
         }
-        
+
         #gameCanvas {
             display: block;
             image-rendering: crisp-edges;
             image-rendering: pixelated;
         }
-        
+
         #ui {
             position: absolute;
             color: #0ff;
             font-size: 12px;
             text-shadow: 0 0 3px #000;
         }
-        
+
         #topBar {
             position: absolute;
             top: 0;
@@ -40,7 +40,7 @@
             justify-content: space-between;
             padding: 0 20px;
         }
-        
+
         #minimap {
             position: absolute;
             bottom: 10px;
@@ -50,7 +50,7 @@
             border: 2px solid #0ff;
             background: rgba(0,0,0,0.8);
         }
-        
+
         #controls {
             position: absolute;
             bottom: 10px;
@@ -60,7 +60,7 @@
             padding: 10px;
             max-width: 300px;
         }
-        
+
         #eventLog {
             position: absolute;
             top: 50px;
@@ -73,23 +73,23 @@
             overflow-y: auto;
             font-size: 11px;
         }
-        
+
         .event {
             margin: 2px 0;
             padding: 2px;
             animation: fadeIn 0.5s;
         }
-        
+
         .event-battle { color: #f88; }
         .event-build { color: #8f8; }
         .event-resource { color: #ff8; }
         .event-strategic { color: #88f; }
-        
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateX(-20px); }
             to { opacity: 1; transform: translateX(0); }
         }
-        
+
         .unit-button {
             background: rgba(0,100,200,0.5);
             border: 1px solid #0ff;
@@ -99,15 +99,15 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        
+
         .unit-button:hover {
             background: rgba(0,150,255,0.8);
             box-shadow: 0 0 10px #0ff;
         }
-        
+
         .team-red { color: #f44; }
         .team-blue { color: #44f; }
-        
+
         #statusWindow {
             position: absolute;
             bottom: 220px;
@@ -119,26 +119,26 @@
             font-size: 11px;
             display: none;
         }
-        
+
         #statusWindow h3 {
             margin: 0 0 10px 0;
             color: #0ff;
         }
-        
+
         .status-line {
             margin: 3px 0;
             display: flex;
             justify-content: space-between;
         }
-        
+
         .status-label {
             color: #8ff;
         }
-        
+
         .status-value {
             color: #fff;
         }
-        
+
         #introspection {
             position: absolute;
             background: rgba(0,20,40,0.95);
@@ -150,45 +150,45 @@
             min-width: 200px;
             box-shadow: 0 0 20px rgba(0,255,255,0.3);
         }
-        
+
         .intro-header {
             color: #0ff;
             font-weight: bold;
             margin-bottom: 5px;
         }
-        
+
         .intro-line {
             margin: 2px 0;
             color: #8ff;
         }
-        
+
         .intro-value {
             color: #fff;
         }
-        
+
         .health-bar {
             height: 4px;
             background: #333;
             margin: 3px 0;
         }
-        
+
         .health-fill {
             height: 100%;
             background: #0f0;
             transition: width 0.3s;
         }
-        
+
         .shield-bar {
             height: 4px;
             background: #333;
             margin: 3px 0;
         }
-        
+
         .shield-fill {
             height: 100%;
             background: #0ff;
         }
-        
+
         #resourceBar {
             position: absolute;
             top: 50px;
@@ -198,7 +198,7 @@
             padding: 10px;
             min-width: 200px;
         }
-        
+
         .resource-display {
             display: flex;
             justify-content: space-between;
@@ -206,9 +206,10 @@
         }
     </style>
 </head>
-<body>
+<body> 
     <canvas id="gameCanvas" tabindex="0"></canvas>
     
+ 
     <div id="ui">
         <div id="topBar">
             <div>
@@ -221,12 +222,12 @@
                 <span class="team-red">RED: <span id="redUnits">0</span> units | Commander: <span id="redCommander">100%</span></span>
             </div>
         </div>
-        
+
         <div id="eventLog">
             <h3 style="margin: 0 0 10px 0;">Battle Events</h3>
             <div id="events"></div>
         </div>
-        
+
         <div id="resourceBar">
             <h3 style="margin: 0 0 10px 0;">Resources</h3>
             <div class="resource-display">
@@ -246,9 +247,9 @@
                 <span id="redEnergy">1000</span>
             </div>
         </div>
-        
+
         <canvas id="minimap"></canvas>
-        
+
         <div id="controls">
             <h3>Controls</h3>
             <p>Mouse Wheel: Zoom (0.1x - 1000x)</p>
@@ -257,21 +258,17 @@
             <p>C: Auto Camera (follow action)</p>
             <p>Space: Pause/Resume</p>
             <p>R: Restart Battle</p>
-        </div>
-        
+        </div> 
         <div id="fpvMode">
             <h3>First Person View</h3>
             <p>ESC to exit</p>
-        </div>
-        
+        </div> 
         <div id="statusWindow">
             <h3>Status Report</h3>
             <div id="statusContent"></div>
-        </div>
-        
+        </div> 
         <div id="introspection"></div>
-    </div>
-    
+    </div>  
     <script type="module" src="js/main.js"></script>
-</body>
+ </body>
 </html>
