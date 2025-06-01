@@ -72,9 +72,10 @@ export function initInputHandling(gameContext) {
                 const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
                 camera.zoom *= zoomFactor;
                 camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom));
-            }
-            e.preventDefault(); // Prevent page scrolling
-        });
+            } 
+            // e.preventDefault(); // Prevent page scrolling - removed for passive listener
+        }, { passive: true }); // Added passive: true
+ 
     } else {
         console.error("Canvas element not found in gameContext for input handling.");
     }
