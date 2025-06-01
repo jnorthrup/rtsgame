@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         let errorMsg = "Failed to find required canvas elements. Game cannot start.";
         if (!gameCanvas) errorMsg += " Missing 'gameCanvas'.";
-        if (!minimapCanvas) errorMsg += " Missing 'minimapCanvas'.";
+        if (!minimapCanvas) errorMsg += " Missing 'minimap'.";
         console.error(errorMsg);
         // Optionally display this error to the user in the HTML
         const body = document.querySelector('body');
