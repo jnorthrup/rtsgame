@@ -1,3 +1,4 @@
+import { UNIT_TYPES } from './unitTypes.js';
 const BUILDING_TYPES = {
     landFactory: {
         name: 'Land Factory',
