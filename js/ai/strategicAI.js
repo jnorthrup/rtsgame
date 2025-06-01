@@ -1,4 +1,5 @@
  
+ 
 import { resources } from '../gameState.js';
 import { BUILDING_TYPES } // Make sure this is imported if not already from constants
     from '../constants.js';
@@ -59,8 +60,7 @@ export function makeStrategicDecisions(currentBuildings, currentUnits, currentCa
                     }
                     const event = addEvent('strategic',
                         `${team.toUpperCase()} launches raid on enemy economy!`, 2);
-                    if(event) event.position = { x: targetBuilding.x, y: targetBuilding.y };
-=======
+                    if(event) event.position = { x: targetBuilding.x, y: targetBuilding.y };  
 import { BUILDING_TYPES } from '../config/buildingTypes.js';
 import { UNIT_TYPES } from '../config/unitTypes.js';
 import { findLandPosition } from '../core/terrain.js';
@@ -179,5 +179,9 @@ export function coordinateAttacks(gameContext) {
                         });
                         gameContext.captions.push(new Caption(centerX, centerY,
                             `Coordinated strike!`, '#ff0', 14));
-                    }
- 
+                    } 
+                }
+            }
+        }
+    }
+} 
