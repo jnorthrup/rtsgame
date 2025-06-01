@@ -180,130 +180,9 @@ export function initGame(gameContext) {
 
     addEvent(gameContext, 'strategic', 'Battle commenced!', 3);
 }
-
-// AI and Strategic Functions (typically called by update)
-// Not exported by default as they are internal to the game logic loop (update).
-function makeStrategicDecisions(gameContext) {
-    // Check if teams should build advanced factories
-    for (const team of ['blue', 'red']) {
-        const teamBuildings = gameContext.buildings.filter(b => b.team === team);
-        const hasAdvanced = teamBuildings.some(b => b.type.name === 'Advanced Land Factory');
-
-        if (!hasAdvanced && gameContext.resources[team].mass > 500 && Math.random() < 0.1) {
-            // BUILDING_TYPES.commander is no longer a thing, ACU is a unit.
-            // Need to find the ACU unit for the team instead.
-            const commanderUnit = gameContext.units.find(u => u.team === team && u.type === UNIT_TYPES.commander);
-
-            if (commanderUnit) {
-                const pos = findLandPosition(gameContext, commanderUnit.x + (Math.random() - 0.5) * 300,
-                                           commanderUnit.y + (Math.random() - 0.5) * 300);
-                if (pos) { // Ensure a position was found
-                    gameContext.buildings.push(new Building(pos.x, pos.y, team, BUILDING_TYPES.advancedLandFactory));
-                    const event = addEvent(gameContext, 'build',
-                        `${team.toUpperCase()} constructs Advanced Factory!`, 2);
-                    event.position = { x: pos.x, y: pos.y };
-                } else {
-                    console.warn(`AI for ${team} could not find a position for Advanced Land Factory near commander.`);
-                }
-            }
-        }
-
-        // Decide on raid groups
-        const teamUnits = gameContext.units.filter(u => u.team === team && !u.type.support);
-        if (teamUnits.length > 10 && Math.random() < 0.05) {
-            // Form raid group
-            const raidSize = Math.min(5 + Math.floor(Math.random() * 5), teamUnits.length / 2);
-            const raiders = teamUnits.slice(0, raidSize);
-            const enemyTargets = gameContext.buildings.filter(b => b.team !== team && b.type.resourceGeneration);
-
-            if (enemyTargets.length > 0) {
-                const target = enemyTargets[Math.floor(Math.random() * enemyTargets.length)];
-                raiders.forEach(unit => {
-                    unit.patrolTarget = { x: target.x, y: target.y };
-                    unit.aggressiveness = 0.9;
-                });
-
-                if (raiders.length > 0) { // Ensure there are raiders before trying to access raiders[0]
-                    gameContext.captions.push(new Caption(raiders[0].x, raiders[0].y,
-                        `Raid group forming!`, '#f80', 12));
-
-                    const event = addEvent(gameContext, 'strategic',
-                        `${team.toUpperCase()} launches raid on enemy economy!`, 2);
-                    event.position = { x: target.x, y: target.y };
-                }
-            }
-        }
-    }
-}
-
-function coordinateAttacks(gameContext) {
-    // Group nearby units for coordinated attacks
-    for (const team of ['blue', 'red']) {
-        const teamUnits = gameContext.units.filter(u => u.team === team && !u.type.support);
-
-        // Find clusters of units
-        const processed = new Set();
-
-        for (const unit of teamUnits) {
-            if (processed.has(unit)) continue;
-
-            const nearby = teamUnits.filter(u =>
-                !processed.has(u) &&
-                unit.getDistance(u) < 150 // getDistance is a Unit method
-            );
-
-            if (nearby.length >= 3) {
-                // Coordinate this group
-                const group = [unit, ...nearby];
-                group.forEach(u => processed.add(u));
-
-                // Find best target for group
-                const enemies = [...gameContext.units.filter(u => u.team !== team),
-                               ...gameContext.buildings.filter(b => b.team !== team)];
-
-                if (enemies.length > 0) {
-                    // Calculate group center
-                    const centerX = group.reduce((sum, u) => sum + u.x, 0) / group.length;
-                    const centerY = group.reduce((sum, u) => sum + u.y, 0) / group.length;
-
-                    // Find high-value target
-                    let bestTarget = null;
-                    let bestScore = -Infinity;
-
-                    for (const enemy of enemies) {
-                        const dist = Math.sqrt((enemy.x - centerX) ** 2 + (enemy.y - centerY) ** 2);
-                        let score = 1000 / (dist + 100);
-
-                        if (enemy.type) { // Could be a unit or a building
-                            if (enemy.type === UNIT_TYPES.commander || enemy.type === BUILDING_TYPES.commander) score *= 3; // Commander is high priority
-                            else if (enemy.type.tier >= 2) score *= 2; // tier is likely a unit property
-                            else if (enemy.type.resourceGeneration) score *= 1.5; // resourceGeneration is a building property
-                        }
-
-                        if (score > bestScore) {
-                            bestScore = score;
-                            bestTarget = enemy;
-                        }
-                    }
-
-                    if (bestTarget) {
-                        // Assign target to group
-                        group.forEach(u => {
-                            u.target = bestTarget;
-                            u.lastTargetSwitch = Date.now(); // Assumes Unit has lastTargetSwitch
-                        });
-
-                        // Group attack caption
-                        gameContext.captions.push(new Caption(centerX, centerY,
-                            `Coordinated strike!`, '#ff0', 14));
-                    }
-                }
-            }
-        }
-    }
-}
-
-
+ 
+// AI and Strategic Functions are now imported from strategicAI.js
+ 
 export function update(gameContext) {
     if (gameContext.gameState.paused || gameContext.gameState.winner) return;
 
@@ -335,8 +214,8 @@ export function update(gameContext) {
     // Update units
     // The Unit.update method expects (units, buildings)
     // These are available directly in gameContext.
-    for (let i = gameContext.units.length - 1; i >= 0; i--) {
-        const unit = gameContext.units[i]; 
+    for (let i = gameContext.units.length - 1; i >= 0; i--) { 
+        const unit = gameContext.units[i];
         unit.update(gameContext); // Unit.update now only takes gameContext
  
 
