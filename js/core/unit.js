@@ -1,6 +1,7 @@
 import { UNIT_TYPES } from '../config/unitTypes.js'; // Used by constructor and potentially methods
 import { BUILDING_TYPES } from '../config/buildingTypes.js'; // Used by performSupportRole
 import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+import { findPath } from '../pathfinding/astar.js';
 // Effect and Caption constructors will be used via gameContext.Effect and gameContext.Caption
 
 class Unit {
@@ -38,6 +39,10 @@ class Unit {
         this.escapeDuration = 0;
         this.STUCK_FRAMES_THRESHOLD = 30;
         this.ESCAPE_MODE_DURATION_FRAMES = 60;
+        this.path = null;
+        this.currentWaypointIndex = 0;
+        this.pathRequestCooldown = 0;
+        this.PATH_REQUEST_INTERVAL = 30; // Request path every ~0.5s at 60fps
     }
 
     getCurrentSpeed(gameContext) {
@@ -101,109 +106,164 @@ class Unit {
     }
 
     defaultMovementAndTargeting(gameContext) {
-        const { units, buildings } = gameContext;
+        const { units, buildings } = gameContext; // Keep for findTarget
 
         if (this.isEscaping) {
             if (this.escapeDuration > 0) {
-                this.angle = this.escapeAngle; // Maintain escape angle
+                this.angle = this.escapeAngle;
                 const currentSpeed = this.getCurrentSpeed(gameContext);
                 this.vx = Math.cos(this.angle) * currentSpeed;
                 this.vy = Math.sin(this.angle) * currentSpeed;
                 this.escapeDuration--;
             } else {
-                this.isEscaping = false; // Escape duration finished
-                this.stuckFrames = 0; // Reset stuck counter
+                this.isEscaping = false;
+                this.stuckFrames = 0;
+                this.path = null; // Clear path after escaping, force re-path
             }
-        }
-
-        if (!this.isEscaping) { // Only set new target-based movement if not actively escaping
-            // Combat behavior with dynamic objectives
-            if (!this.target || this.target.hp <= 0 ||
-                (Date.now() - this.lastTargetSwitch > 5000 && Math.random() < 0.1)) {
-                this.findTarget(gameContext);
+        } else {
+            // TARGET ACQUISITION (similar to before)
+            if (!this.target || this.target.hp <= 0 || (Date.now() - this.lastTargetSwitch > 5000 && Math.random() < 0.1)) {
+                this.findTarget(gameContext); // findTarget sets this.target
                 this.lastTargetSwitch = Date.now();
+                this.path = null; // New target, clear old path
+            }
+            if (Math.random() < 0.005 && !this.target && !this.patrolTarget) { // Only look for patrol if no current combat target or existing patrol
+                // Simplified patrol target selection for brevity
+                if (gameContext.resourceNodes && gameContext.resourceNodes.length > 0) {
+                    const targetNode = gameContext.resourceNodes[Math.floor(Math.random() * gameContext.resourceNodes.length)];
+                    if (targetNode) {
+                        this.patrolTarget = { x: targetNode.x, y: targetNode.y };
+                        this.path = null; // New patrol target, clear old path
+                    }
+                }
             }
 
-            // Patrol or raid behavior
-            if (Math.random() < 0.005 && !this.target) { // Only look for patrol if no current combat target
-                if (this.aggressiveness > 0.7) {
-                    const enemyCommanderUnit = units.find(u => u.team !== this.team && u.type === UNIT_TYPES.commander);
-                    if (enemyCommanderUnit) {
-                        this.patrolTarget = { x: enemyCommanderUnit.x + (Math.random() - 0.5) * 500, y: enemyCommanderUnit.y + (Math.random() - 0.5) * 500 };
-                    }
-                } else if (this.aggressiveness < 0.3) {
-                    const friendlyCommanderUnit = units.find(u => u.team === this.team && u.type === UNIT_TYPES.commander);
-                    if (friendlyCommanderUnit) {
-                        this.patrolTarget = { x: friendlyCommanderUnit.x + (Math.random() - 0.5) * 300, y: friendlyCommanderUnit.y + (Math.random() - 0.5) * 300 };
-                    }
+            const currentPrimaryDestination = this.target || this.patrolTarget;
+
+            if (currentPrimaryDestination) {
+                let needsNewPath = false;
+                if (!this.path) {
+                    needsNewPath = true;
                 } else {
-                    if (gameContext.resourceNodes && gameContext.resourceNodes.length > 0) {
-                        const targetNode = gameContext.resourceNodes[Math.floor(Math.random() * gameContext.resourceNodes.length)];
-                        if (targetNode) {
-                            this.patrolTarget = { x: targetNode.x, y: targetNode.y };
+                    // More robust check: if target moved significantly from path's end, or if unit is far from current path.
+                    // Simple check for now: if cooldown is up, consider re-pathing.
+                    if (this.pathRequestCooldown <= 0) {
+                        // Check if target has moved significantly from path's intended destination
+                        const pathEndPoint = this.path[this.path.length-1];
+                        const dxTarget = currentPrimaryDestination.x - pathEndPoint.x;
+                        const dyTarget = currentPrimaryDestination.y - pathEndPoint.y;
+                        if (Math.sqrt(dxTarget*dxTarget + dyTarget*dyTarget) > TILE_SIZE * 2) { // If target moved > 2 tiles from path end
+                           needsNewPath = true;
                         }
                     }
                 }
-            }
 
-            if (this.target) {
-                const dx = this.target.x - this.x;
-                const dy = this.target.y - this.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-
-                if (dist > this.type.range) {
-                    this.angle = Math.atan2(dy, dx);
-                    const currentSpeed = this.getCurrentSpeed(gameContext);
-                    this.vx = Math.cos(this.angle) * currentSpeed;
-                    this.vy = Math.sin(this.angle) * currentSpeed;
-                } else {
-                    this.vx = 0;
-                    this.vy = 0;
-                    if (this.cooldown <= 0) {
-                        this.attack(this.target, gameContext);
-                        this.cooldown = this.type.attackSpeed;
+                if (needsNewPath && this.pathRequestCooldown <= 0) {
+                    this.path = findPath(
+                        { x: this.x, y: this.y },
+                        { x: currentPrimaryDestination.x, y: currentPrimaryDestination.y },
+                        gameContext,
+                        this.type.movementType || 'land'
+                    );
+                    this.currentWaypointIndex = 0;
+                    this.pathRequestCooldown = this.PATH_REQUEST_INTERVAL;
+                    if (!this.path) {
+                        if (gameContext.addEvent) gameContext.addEvent(gameContext, 'debug', `Path not found: ${this.type.name} to ${currentPrimaryDestination.type ? currentPrimaryDestination.type.name : 'point'}`, 0);
+                        // console.log(`Unit ${this.type.name} (${this.team}) could not find path to ${currentPrimaryDestination.type ? currentPrimaryDestination.type.name : 'point'}.`);
+                        // Optional: Clear target if path fails, to prevent repeated attempts to a known unreachable spot.
+                        // this.target = null; this.patrolTarget = null;
+                    } else {
+                         if (gameContext.addEvent) gameContext.addEvent(gameContext, 'debug', `Path found for ${this.type.name} with ${this.path.length} waypoints.`, 0);
                     }
                 }
-            } else if (this.patrolTarget) {
-                const dxPatrol = this.patrolTarget.x - this.x;
-                const dyPatrol = this.patrolTarget.y - this.y;
-                const distPatrol = Math.sqrt(dxPatrol * dxPatrol + dyPatrol * dyPatrol);
-                const moveThreshold = 50;
 
-                if (distPatrol > moveThreshold) {
-                    this.angle = Math.atan2(dyPatrol, dxPatrol);
+                // PATH FOLLOWING
+                if (this.path && this.currentWaypointIndex < this.path.length) {
+                    const waypoint = this.path[this.currentWaypointIndex];
+                    const dx = waypoint.x - this.x;
+                    const dy = waypoint.y - this.y;
+                    const distanceToWaypoint = Math.sqrt(dx * dx + dy * dy);
+                    const WAYPOINT_REACH_THRESHOLD = TILE_SIZE * 0.5;
+
+                    if (distanceToWaypoint < WAYPOINT_REACH_THRESHOLD) {
+                        this.currentWaypointIndex++;
+                        if (this.currentWaypointIndex >= this.path.length) { // Reached end of path
+                            this.path = null;
+                            if (this.patrolTarget && Math.abs(this.x - this.patrolTarget.x) < WAYPOINT_REACH_THRESHOLD && Math.abs(this.y - this.patrolTarget.y) < WAYPOINT_REACH_THRESHOLD) {
+                                this.patrolTarget = null; // Arrived at patrol point
+                            }
+                            // If it was a this.target, it will either be attacked next (if in range) or a new path requested if it moved.
+                        }
+                    }
+
+                    if (this.path && this.currentWaypointIndex < this.path.length) {
+                        const nextWaypoint = this.path[this.currentWaypointIndex];
+                        this.angle = Math.atan2(nextWaypoint.y - this.y, nextWaypoint.x - this.x);
+                        const currentSpeed = this.getCurrentSpeed(gameContext);
+                        this.vx = Math.cos(this.angle) * currentSpeed;
+                        this.vy = Math.sin(this.angle) * currentSpeed;
+                    } else { // Path just finished or became null
+                        this.vx = 0; this.vy = 0;
+                    }
+                } else if (this.target) { // NO PATH, but has a target (fallback to direct engagement or stop)
+                    const distToTarget = this.getDistance(this.target);
+                    if (distToTarget > this.type.range) {
+                        // Fallback: direct move if very close, or path failed and target is not immediately reachable
+                        // This can replace the old direct movement logic.
+                        // If path failed, unit might just stop if target is far.
+                        // For simplicity, if path failed, we stop unless very close.
+                        if (distToTarget < TILE_SIZE * 2) { // If very close, try direct move
+                           this.angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                           const currentSpeed = this.getCurrentSpeed(gameContext);
+                           this.vx = Math.cos(this.angle) * currentSpeed;
+                           this.vy = Math.sin(this.angle) * currentSpeed;
+                        } else {
+                           this.vx = 0; this.vy = 0; // Stop if path failed and target is not very close
+                        }
+                    } else { // In range to attack
+                        this.vx = 0; this.vy = 0;
+                        if (this.cooldown <= 0) { this.attack(this.target, gameContext); this.cooldown = this.type.attackSpeed; }
+                    }
+                } else if (this.patrolTarget) { // NO PATH, but has a patrol target (e.g. path failed)
+                    // Similar to target: if very close, try direct move. Else stop.
+                    const distToPatrol = Math.sqrt(Math.pow(this.patrolTarget.x - this.x, 2) + Math.pow(this.patrolTarget.y - this.y, 2));
+                     if (distToPatrol < TILE_SIZE * 2) {
+                        this.angle = Math.atan2(this.patrolTarget.y - this.y, this.patrolTarget.x - this.x);
+                        const currentSpeed = this.getCurrentSpeed(gameContext);
+                        this.vx = Math.cos(this.angle) * currentSpeed;
+                        this.vy = Math.sin(this.angle) * currentSpeed;
+                     } else {
+                        this.vx = 0; this.vy = 0;
+                     }
+                      if (distToPatrol < TILE_SIZE * 0.5) this.patrolTarget = null; // Arrived
+                } else { // NO TARGET, NO PATH (wander)
+                    if (Math.random() < 0.02) { this.angle += (Math.random() - 0.5) * 0.5; }
                     const currentSpeed = this.getCurrentSpeed(gameContext);
-                    this.vx = Math.cos(this.angle) * currentSpeed;
-                    this.vy = Math.sin(this.angle) * currentSpeed;
-                } else {
-                    this.vx = 0;
-                    this.vy = 0;
+                    this.vx = Math.cos(this.angle) * currentSpeed * 0.5;
+                    this.vy = Math.sin(this.angle) * currentSpeed * 0.5;
                 }
-                 if (distPatrol <= 50) {
-                     this.patrolTarget = null;
-                 }
-            } else {
-                // Wander behavior
-                if (Math.random() < 0.02) {
-                    this.angle += (Math.random() - 0.5) * 0.5;
-                }
+            } else { // NO CURRENT PRIMARY DESTINATION (target or patrolTarget)
+                // Wander logic
+                if (Math.random() < 0.02) { this.angle += (Math.random() - 0.5) * 0.5; }
                 const currentSpeed = this.getCurrentSpeed(gameContext);
                 this.vx = Math.cos(this.angle) * currentSpeed * 0.5;
                 this.vy = Math.sin(this.angle) * currentSpeed * 0.5;
             }
-        } // End of if(!this.isEscaping)
+        } // End of main 'else' for 'if (this.isEscaping)'
 
         this.applyMovement(gameContext);
 
         if (this.cooldown > 0) this.cooldown--;
+        if (this.pathRequestCooldown > 0) this.pathRequestCooldown--;
         if (this.type.grenadeAbility && this.grenadeCooldown > 0) {
             this.grenadeCooldown--;
         }
         if (this.captionCooldown > 0) this.captionCooldown--;
 
-        if (this.captionCooldown <= 0 && Math.random() < 0.01) {
-            this.showStateCaption(gameContext);
-        }
+        // showStateCaption might be too spammy with pathfinding debug, consider conditional logging
+        // if (this.captionCooldown <= 0 && Math.random() < 0.01) {
+        //     this.showStateCaption(gameContext);
+        // }
     }
 
     launchGrenade(targetX, targetY, gameContext) {
