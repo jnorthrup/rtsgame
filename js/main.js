@@ -5,7 +5,8 @@ import { Unit } from './core/unit.js';
 import { Building } from './core/building.js';
 import { Effect } from './core/effect.js';
 import { Caption } from './core/caption.js';
-import { initGame, gameLoop, addEvent as addEventFromGameJs, formatTime as formatTimeFromGameJs } from './core/game.js';
+import { GrenadeProjectile } from './core/projectile.js'; // Added import
+import { initGame, gameLoop, addEvent as addEventFromGameJs, formatTime as formatTimeFromGameJs, performAoeDamage } from './core/game.js'; // Added performAoeDamage
 import { initInputHandling } from './input/inputHandler.js'; // Import input handling
 
 // --- Canvas and Contexts ---
@@ -42,6 +43,7 @@ const gameState = {
     paused: false,
     selectedUnit: null,
     fpvMode: false,
+    aimingGrenade: false,
     winner: null,
     gameTime: 0,
     events: [], // Will be managed by addEvent in game.js
@@ -60,6 +62,7 @@ const units = [];
 const buildings = [];
 const effects = [];
 const captions = [];
+const projectiles = []; // Added projectiles array
 
 // --- Game Context Object ---
 // This object bundles all shared state and functionality to be passed to game modules.
@@ -69,12 +72,12 @@ const gameContext = {
     // Core State
     resources, camera, gameState,
     terrain, resourceNodes,
-    units, buildings, effects, captions,
+    units, buildings, effects, captions, projectiles, // Added projectiles
     // Imported Types & Constants (for convenience if needed by functions passed in context)
     UNIT_TYPES, BUILDING_TYPES,
     WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES,
     // Imported Class Constructors
-    Unit, Building, Effect, Caption,
+    Unit, Building, Effect, Caption, GrenadeProjectile, // Added GrenadeProjectile
     // Utilities & Functions passed into context
     // addEvent: addEventFromGameJs, // addEvent is now primarily used within game.js by other game logic.
     // formatTime: formatTimeFromGameJs, // formatTime is imported and used by ui.js directly.
@@ -93,7 +96,8 @@ const gameContext = {
     },
     // Make initGame and addEvent available on gameContext for inputHandler and potentially other modules
     initGame: initGame,
-    addEvent: addEventFromGameJs
+    addEvent: addEventFromGameJs,
+    performAoeDamage: performAoeDamage // Added performAoeDamage to gameContext
 };
 
 

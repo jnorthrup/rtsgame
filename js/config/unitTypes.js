@@ -123,7 +123,9 @@ const UNIT_TYPES = {
         name: 'Engineer',
         domain: 'land',
         size: 8,
-        speed: 1.5,
+        speed: 1.5, // General speed reference
+        speedLand: 1.5,
+        speedWater: 1.0,
         maxHp: 60,
         damage: 0,
         range: 0,
@@ -153,6 +155,8 @@ const UNIT_TYPES = {
         support: true,
         shields: 100,
         shieldRegen: 2,
+        shieldRadius: 150, // Added default shield radius
+        shieldBoost: 5,    // Added default shield boost amount
         tier: 2
     },
     experimental: {
@@ -176,7 +180,9 @@ const UNIT_TYPES = {
         name: 'Commander',
         domain: 'land',
         size: 18,
-        speed: 0.6,
+        speed: 0.6, // General speed reference
+        speedLand: 0.6,
+        speedWater: 0.4,
         maxHp: 1500,
         damage: 75,
         range: 180,
@@ -190,7 +196,15 @@ const UNIT_TYPES = {
         buildRate: 1.0, 
         shields: 200,
         shieldRegen: 2,
-        movementType: 'amphibious' // Added for Commander 
+        movementType: 'amphibious', // Added for Commander
+        grenadeAbility: {
+            damage: 50,
+            radius: 75,
+            range: 200,
+            cooldownTime: 600, // 10 seconds
+            projectileSpeed: 5,
+            effectColor: '#FFA500' // Orange for explosion
+        }
     }
 };
 

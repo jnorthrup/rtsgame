@@ -98,9 +98,10 @@ export function coordinateAttacks(gameContext) {
                         let score = 1000 / (dist + 100);
 
                         if (enemy.type) {
-                            if (enemy.type === UNIT_TYPES.commander || enemy.type === BUILDING_TYPES.commander) score *= 3;
-                            else if (enemy.type.tier >= 2) score *= 2;
-                            else if (enemy.type.resourceGeneration) score *= 1.5;
+                            // Prioritize unit commanders. BUILDING_TYPES.commander is not a valid type.
+                            if (enemy.type === UNIT_TYPES.commander) score *= 3;
+                            else if (enemy.type.tier >= 2) score *= 2; // Prioritize higher tier units/buildings
+                            else if (enemy.type.resourceGeneration) score *= 1.5; // Prioritize economic buildings
                         }
 
                         if (score > bestScore) {
