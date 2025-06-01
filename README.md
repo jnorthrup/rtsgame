@@ -1,3 +1,3 @@
-# rtsgame
+ # rtsgame
 
-https://jnorthrup.github.io/rtsgame
+https://jnorthrup.github.io/rtsgame 
