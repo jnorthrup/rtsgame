@@ -159,33 +159,37 @@ class Unit {
                 }
 
                 if (needsNewPath && this.pathRequestCooldown <= 0) {
+                    const moveType = this.type.movementType || 'land';
+                    console.log(`Unit ${this.type.name} requesting path. MovementType: '${moveType}'`); // ADD THIS LOG (uncommented)
                     this.path = findPath(
                         { x: this.x, y: this.y },
                         { x: currentPrimaryDestination.x, y: currentPrimaryDestination.y },
                         gameContext,
-                        this.type.movementType || 'land'
+                        moveType
                     );
                     this.currentWaypointIndex = 0;
                     this.pathRequestCooldown = this.PATH_REQUEST_INTERVAL;
                     if (!this.path) {
                         if (gameContext.addEvent) gameContext.addEvent(gameContext, 'debug', `Path not found: ${this.type.name} to ${currentPrimaryDestination.type ? currentPrimaryDestination.type.name : 'point'}`, 0);
                         // console.log(`Unit ${this.type.name} (${this.team}) could not find path to ${currentPrimaryDestination.type ? currentPrimaryDestination.type.name : 'point'}.`);
-                        // Optional: Clear target if path fails, to prevent repeated attempts to a known unreachable spot.
-                        // this.target = null; this.patrolTarget = null;
                     } else {
                          if (gameContext.addEvent) gameContext.addEvent(gameContext, 'debug', `Path found for ${this.type.name} with ${this.path.length} waypoints.`, 0);
+                         console.log(`DEBUG: Unit ${this.type.name} new path found. Length: ${this.path.length}. Waypoints: ${JSON.stringify(this.path)}`); // JSON.stringify can be verbose
                     }
                 }
 
                 // PATH FOLLOWING
                 if (this.path && this.currentWaypointIndex < this.path.length) {
+                    console.log(`DEBUG: Unit ${this.type.name} (${this.team}, ID: ${this.id || 'N/A'}) at (${this.x.toFixed(1)}, ${this.y.toFixed(1)}). Path length: ${this.path.length}. Current WP Index: ${this.currentWaypointIndex}.`);
                     const waypoint = this.path[this.currentWaypointIndex];
                     const dx = waypoint.x - this.x;
                     const dy = waypoint.y - this.y;
                     const distanceToWaypoint = Math.sqrt(dx * dx + dy * dy);
-                    const WAYPOINT_REACH_THRESHOLD = TILE_SIZE * 0.5;
+                    const WAYPOINT_REACH_THRESHOLD = Math.max(this.type.size || 10, TILE_SIZE * 0.75);
+                    console.log(`DEBUG: Unit ${this.type.name} targeting WP ${this.currentWaypointIndex}: (${waypoint.x.toFixed(1)}, ${waypoint.y.toFixed(1)}). Dist: ${distanceToWaypoint.toFixed(1)}. Threshold: ${WAYPOINT_REACH_THRESHOLD.toFixed(1)}`);
 
                     if (distanceToWaypoint < WAYPOINT_REACH_THRESHOLD) {
+                        console.log(`DEBUG: Unit ${this.type.name} REACHED WP ${this.currentWaypointIndex}.`);
                         this.currentWaypointIndex++;
                         if (this.currentWaypointIndex >= this.path.length) { // Reached end of path
                             this.path = null;

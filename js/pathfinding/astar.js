@@ -24,28 +24,48 @@ function calculateHeuristic(nodeA, nodeB) {
 }
 
 function isTraversable(gridX, gridY, gameContext, unitMovementType) {
-    const { terrain } = gameContext;
+    const { terrain } = gameContext; // gameConstants are imported at module level
+
+    console.log(`isTraversable CALLED: gridX=${gridX}, gridY=${gridY}, unitMovementType='${unitMovementType}'`);
 
     // Check bounds
     if (gridX < 0 || gridX >= GRID_SIZE || gridY < 0 || gridY >= GRID_SIZE) {
+        console.log(`isTraversable: Out of bounds.`);
         return false;
     }
-    if (!terrain[gridX] || terrain[gridX][gridY] === undefined) {
-        console.warn(`A* isTraversable: Terrain data missing at ${gridX},${gridY}`);
+    if (!terrain[gridX] || terrain[gridX][gridY] === undefined) { // This check might be problematic if terrain[gridX] itself is undefined
+        console.log(`isTraversable: Terrain data missing or undefined at [${gridX}][${gridY}].`);
         return false;
     }
 
-    const terrainType = terrain[gridX][gridY];
+    const terrainTypeAtNodeRaw = terrain[gridX][gridY];
+    const terrainTypeAtNode = parseInt(terrainTypeAtNodeRaw, 10);
+
+    console.log(`isTraversable: Node [${gridX},${gridY}] has RawType='${terrainTypeAtNodeRaw}' (type: ${typeof terrainTypeAtNodeRaw}), ParsedType=${terrainTypeAtNode} (type: ${typeof terrainTypeAtNode})`);
+    console.log(`isTraversable: Comparing against TERRAIN_TYPES: LAND=${TERRAIN_TYPES.LAND}, WATER=${TERRAIN_TYPES.WATER}, MOUNTAIN=${TERRAIN_TYPES.MOUNTAIN}`);
+
+    if (isNaN(terrainTypeAtNode)) {
+        console.log(`isTraversable: Parsed terrainType is NaN for raw value '${terrainTypeAtNodeRaw}'. Node [${gridX},${gridY}] considered not traversable.`);
+        return false;
+    }
 
     if (unitMovementType === 'land') {
-        return terrainType !== TERRAIN_TYPES.WATER && terrainType !== TERRAIN_TYPES.MOUNTAIN;
+        const isWater = terrainTypeAtNode === TERRAIN_TYPES.WATER;
+        const isMountain = terrainTypeAtNode === TERRAIN_TYPES.MOUNTAIN;
+        const result = !isWater && !isMountain;
+        console.log(`isTraversable (land unit): terrainTypeAtNode=${terrainTypeAtNode}. IsWater=${isWater}, IsMountain=${isMountain}. Result=${result}`);
+        return result;
     } else if (unitMovementType === 'amphibious') {
-        return terrainType !== TERRAIN_TYPES.MOUNTAIN; // Amphibious can traverse land and water
+        const isMountain = terrainTypeAtNode === TERRAIN_TYPES.MOUNTAIN;
+        const result = !isMountain;
+        console.log(`isTraversable (amphibious unit): terrainTypeAtNode=${terrainTypeAtNode}. IsMountain=${isMountain}. Result=${result}`);
+        return result;
     } else if (unitMovementType === 'air') {
-        return true; // Air units can traverse any terrain
+        console.log(`isTraversable (air unit): Result=true`);
+        return true;
     }
-    // Add other movement types if necessary
-    console.warn(`A* isTraversable: Unknown unitMovementType: ${unitMovementType}`);
+
+    console.log(`isTraversable: Unknown unitMovementType or fallthrough. unitMovementType='${unitMovementType}'. Result=false`);
     return false;
 }
 
