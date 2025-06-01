@@ -140,53 +140,71 @@
         }
         
         #introspection {
-            position: absolute;
+            position: absolute; /* Will be controlled by JS */
             background: rgba(0,20,40,0.95);
             border: 1px solid #0ff;
             padding: 8px;
             font-size: 10px;
-            pointer-events: none;
-            display: none;
+            pointer-events: none; /* So it doesn't interfere with mouse events on canvas */
+            display: none; /* Initially hidden */
             min-width: 200px;
+            max-width: 300px; /* Prevent it from becoming too wide */
             box-shadow: 0 0 20px rgba(0,255,255,0.3);
+            z-index: 1000; /* Ensure it's on top of other UI elements */
         }
         
         .intro-header {
-            color: #0ff;
+            /* color: #0ff; */ /* Default color removed, will be set by JS */
             font-weight: bold;
             margin-bottom: 5px;
+            border-bottom: 1px solid #088; /* Add a separator */
+            padding-bottom: 3px;
         }
         
         .intro-line {
-            margin: 2px 0;
+            margin: 3px 0; /* Increased margin for readability */
             color: #8ff;
+            display: flex; /* For better alignment of label and value */
+            justify-content: space-between;
         }
         
+        .intro-label {
+             color: #8ff;
+             margin-right: 5px; /* Space between label and value */
+        }
+
         .intro-value {
             color: #fff;
+            text-align: right; /* Align values to the right */
         }
         
         .health-bar {
-            height: 4px;
+            height: 6px; /* Slightly thicker */
             background: #333;
-            margin: 3px 0;
+            margin: 4px 0; /* Increased margin */
+            border-radius: 2px; /* Rounded corners */
+            overflow: hidden; /* Ensure fill stays within bounds */
         }
         
         .health-fill {
             height: 100%;
             background: #0f0;
             transition: width 0.3s;
+            border-radius: 2px;
         }
         
         .shield-bar {
-            height: 4px;
+            height: 6px; /* Slightly thicker */
             background: #333;
-            margin: 3px 0;
+            margin: 4px 0; /* Increased margin */
+            border-radius: 2px;
+            overflow: hidden;
         }
         
         .shield-fill {
             height: 100%;
             background: #0ff;
+            border-radius: 2px;
         }
         
         #resourceBar {
@@ -269,7 +287,7 @@
             <div id="statusContent"></div>
         </div>
         
-        <div id="introspection"></div>
+        <div id="introspection"></div> <!-- This is our target div -->
     </div>
     
     <script>
@@ -295,17 +313,6 @@
         };
         
         // Game state
-        let camera = {
-            x: WORLD_SIZE / 2,
-            y: WORLD_SIZE / 2,
-            zoom: 1.0,
-            minZoom: 0.1,
-            maxZoom: 1000,
-            autoCamera: true,
-            cameraTarget: null,
-            cameraTimer: 0
-        };
-        
         let gameState = {
             paused: false,
             selectedUnit: null,
@@ -314,7 +321,7 @@
             gameTime: 0,
             events: [],
             lastEventTime: 0,
-            hoveredEntity: null,
+            hoveredEntity: null, // Added for introspection
             mouseX: 0,
             mouseY: 0,
             battleIntensity: 0,
@@ -424,7 +431,7 @@
                 this.selected = false;
                 this.task = null;
                 this.shields = type.shields || 0;
-                this.maxShields = type.shields || 0;
+                this.maxShields = type.maxShields || type.shields || 0; // Ensure maxShields is defined
                 this.shieldRegen = type.shieldRegen || 0;
                 this.patrolTarget = null;
                 this.lastTargetSwitch = 0;
@@ -850,8 +857,8 @@
                 this.productionProgress = 0;
                 this.rallyx = x + 100;
                 this.rallyy = y;
-                this.shields = 0;
-                this.maxShields = 0;
+                this.shields = type.shields || 0; // Buildings might have shields too
+                this.maxShields = type.maxShields || type.shields || 0;
                 this.captionCooldown = 0;
             }
             
@@ -974,9 +981,9 @@
                     ctx.stroke();
                     
                     // Commander shield
-                    if (this.shields > 0) {
+                    if (this.shields > 0 && this.maxShields > 0) { // Check maxShields
                         ctx.strokeStyle = '#0ff';
-                        ctx.globalAlpha = 0.5;
+                        ctx.globalAlpha = 0.3 + (this.shields / this.maxShields) * 0.3;
                         ctx.lineWidth = 5;
                         ctx.beginPath();
                         ctx.arc(screenX, screenY, size * 0.9, 0, Math.PI * 2);
@@ -1207,7 +1214,8 @@
                 effectColor: '#0ff',
                 cost: { mass: 120, energy: 200 },
                 support: true,
-                shields: 100,
+                shields: 100, // Base shield capacity for the unit itself
+                maxShields: 100, // Max shield capacity
                 shieldRegen: 2,
                 tier: 2
             },
@@ -1226,6 +1234,7 @@
                 effectColor: '#f0f',
                 cost: { mass: 500, energy: 400 },
                 shields: 200,
+                maxShields: 200,
                 shieldRegen: 5,
                 tier: 3
             }
@@ -1238,7 +1247,9 @@
                 maxHp: 1000,
                 produces: null,
                 color: '#ff0',
-                resourceGeneration: { type: 'mass', amount: 1 }
+                resourceGeneration: { type: 'mass', amount: 1 },
+                shields: 100, // Commander has shields
+                maxShields: 100,
             },
             landFactory: {
                 name: 'Land Factory',
@@ -1353,14 +1364,14 @@
             // Place commanders
             const blueStart = findLandPosition(WORLD_SIZE * 0.2, WORLD_SIZE * 0.5);
             const redStart = findLandPosition(WORLD_SIZE * 0.8, WORLD_SIZE * 0.5);
-            
+
             buildings.push(new Building(blueStart.x, blueStart.y, 'blue', BUILDING_TYPES.commander));
             buildings.push(new Building(redStart.x, redStart.y, 'red', BUILDING_TYPES.commander));
-            
+
             // Place initial factories
             placeFactoriesAroundCommander(blueStart, 'blue');
             placeFactoriesAroundCommander(redStart, 'red');
-            
+
             // Add some initial engineers
             units.push(new Unit(blueStart.x + 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
             units.push(new Unit(blueStart.x - 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
@@ -1394,7 +1405,7 @@
                     }
                 }
             }
-            
+
             return { x: bestX, y: bestY };
         }
         
@@ -1423,7 +1434,7 @@
         
         function placeFactoriesAroundCommander(commanderPos, team) {
             const offset = 150;
-            
+
             // Land factory
             const landPos = findLandPosition(commanderPos.x + offset, commanderPos.y);
             buildings.push(new Building(landPos.x, landPos.y, team, BUILDING_TYPES.landFactory));
@@ -1490,6 +1501,9 @@
                         gameState.selectedUnit = null;
                         gameState.fpvMode = false;
                     }
+                     if (unit === gameState.hoveredEntity) { // Clear hovered if destroyed
+                        gameState.hoveredEntity = null;
+                    }
                 }
             }
             
@@ -1513,6 +1527,9 @@
                         event.position = { x: building.x, y: building.y };
                     }
                     buildings.splice(i, 1);
+                    if (building === gameState.hoveredEntity) { // Clear hovered if destroyed
+                        gameState.hoveredEntity = null;
+                    }
                 }
             }
             
@@ -1895,15 +1912,48 @@
         });
         
         canvas.addEventListener('mousemove', (e) => {
+            // Original mousemove logic for panning and updating gameState.mouseX/Y
             if (mouseDown && !gameState.fpvMode) {
                 const dx = e.clientX - lastMouseX;
                 const dy = e.clientY - lastMouseY;
                 camera.x -= dx / camera.zoom;
                 camera.y -= dy / camera.zoom;
-                camera.autoCamera = false;
+                camera.autoCamera = false; // Disable auto-camera on manual pan
                 lastMouseX = e.clientX;
                 lastMouseY = e.clientY;
             }
+            gameState.mouseX = e.clientX; // Keep track of raw mouse X
+            gameState.mouseY = e.clientY; // Keep track of raw mouse Y
+
+            // Introspection hover detection
+            const worldXMouse = (e.clientX - canvas.width / 2) / camera.zoom + camera.x;
+            const worldYMouse = (e.clientY - canvas.height / 2) / camera.zoom + camera.y;
+            let foundEntity = null;
+
+            // Check units (reverse order for top-most)
+            for (let i = units.length - 1; i >= 0; i--) {
+                const unit = units[i];
+                const unitSize = unit.type.size;
+                if (worldXMouse >= unit.x - unitSize / 2 && worldXMouse <= unit.x + unitSize / 2 &&
+                    worldYMouse >= unit.y - unitSize / 2 && worldYMouse <= unit.y + unitSize / 2) {
+                    foundEntity = unit;
+                    break;
+                }
+            }
+
+            if (!foundEntity) {
+                // Check buildings if no unit found
+                for (let i = buildings.length - 1; i >= 0; i--) {
+                    const building = buildings[i];
+                    const buildingSize = building.type.size;
+                     if (worldXMouse >= building.x - buildingSize / 2 && worldXMouse <= building.x + buildingSize / 2 &&
+                         worldYMouse >= building.y - buildingSize / 2 && worldYMouse <= building.y + buildingSize / 2) {
+                        foundEntity = building;
+                        break;
+                    }
+                }
+            }
+            gameState.hoveredEntity = foundEntity;
         });
         
         canvas.addEventListener('mouseup', () => {
@@ -1948,8 +1998,13 @@
         let lastTime = 0;
         let fps = 0;
         let frameCount = 0;
+
+        // Removed inline introspection UI display function (now in game_ui.js)
         
         function gameLoop(timestamp) {
+            if (typeof updateIntrospectionUIDisplay === 'function') updateIntrospectionUIDisplay();
+            // Call introspection UI update
+
             // Calculate FPS
             frameCount++;
             if (timestamp - lastTime >= 1000) {
@@ -1974,5 +2029,6 @@
         initGame();
         requestAnimationFrame(gameLoop);
     </script>
+<script src="game_ui.js" defer></script>
 </body>
 </html>
