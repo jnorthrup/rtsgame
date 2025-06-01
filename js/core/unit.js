@@ -1,414 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supreme Commander RTS</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background: #000;
-            font-family: 'Courier New', monospace;
-            cursor: crosshair;
-        }
-        
-        #gameCanvas {
-            display: block;
-            image-rendering: crisp-edges;
-            image-rendering: pixelated;
-        }
-        
-        #ui {
-            position: absolute;
-            color: #0ff;
-            font-size: 12px;
-            text-shadow: 0 0 3px #000;
-        }
-        
-        #topBar {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 40px;
-            background: rgba(0,0,0,0.8);
-            border-bottom: 2px solid #0ff;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
-        }
-        
-        #minimap {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            width: 200px;
-            height: 200px;
-            border: 2px solid #0ff;
-            background: rgba(0,0,0,0.8);
-        }
-        
-        #controls {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.8);
-            border: 2px solid #0ff;
-            padding: 10px;
-            max-width: 300px;
-        }
-        
-        #eventLog {
-            position: absolute;
-            top: 50px;
-            left: 10px;
-            width: 300px;
-            height: 200px;
-            background: rgba(0,0,0,0.8);
-            border: 2px solid #0ff;
-            padding: 10px;
-            overflow-y: auto;
-            font-size: 11px;
-        }
-        
-        .event {
-            margin: 2px 0;
-            padding: 2px;
-            animation: fadeIn 0.5s;
-        }
-        
-        .event-battle { color: #f88; }
-        .event-build { color: #8f8; }
-        .event-resource { color: #ff8; }
-        .event-strategic { color: #88f; }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        
-        .unit-button {
-            background: rgba(0,100,200,0.5);
-            border: 1px solid #0ff;
-            color: #fff;
-            padding: 5px 10px;
-            margin: 2px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .unit-button:hover {
-            background: rgba(0,150,255,0.8);
-            box-shadow: 0 0 10px #0ff;
-        }
-        
-        .team-red { color: #f44; }
-        .team-blue { color: #44f; }
-        
-        #statusWindow {
-            position: absolute;
-            bottom: 220px;
-            right: 10px;
-            width: 300px;
-            background: rgba(0,0,0,0.8);
-            border: 2px solid #0ff;
-            padding: 10px;
-            font-size: 11px;
-            display: none;
-        }
-        
-        #statusWindow h3 {
-            margin: 0 0 10px 0;
-            color: #0ff;
-        }
-        
-        .status-line {
-            margin: 3px 0;
-            display: flex;
-            justify-content: space-between;
-        }
-        
-        .status-label {
-            color: #8ff;
-        }
-        
-        .status-value {
-            color: #fff;
-        }
-        
-        #introspection {
-            position: absolute;
-            background: rgba(0,20,40,0.95);
-            border: 1px solid #0ff;
-            padding: 8px;
-            font-size: 10px;
-            pointer-events: none;
-            display: none;
-            min-width: 200px;
-            box-shadow: 0 0 20px rgba(0,255,255,0.3);
-        }
-        
-        .intro-header {
-            color: #0ff;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .intro-line {
-            margin: 2px 0;
-            color: #8ff;
-        }
-        
-        .intro-value {
-            color: #fff;
-        }
-        
-        .health-bar {
-            height: 4px;
-            background: #333;
-            margin: 3px 0;
-        }
-        
-        .health-fill {
-            height: 100%;
-            background: #0f0;
-            transition: width 0.3s;
-        }
-        
-        .shield-bar {
-            height: 4px;
-            background: #333;
-            margin: 3px 0;
-        }
-        
-        .shield-fill {
-            height: 100%;
-            background: #0ff;
-        }
-        
-        #resourceBar {
-            position: absolute;
-            top: 50px;
-            right: 220px;
-            background: rgba(0,0,0,0.8);
-            border: 2px solid #0ff;
-            padding: 10px;
-            min-width: 200px;
-        }
-        
-        .resource-display {
-            display: flex;
-            justify-content: space-between;
-            margin: 5px 0;
-        }
-    </style>
-</head>
-<body>
-    <canvas id="gameCanvas"></canvas>
-    
-    <div id="ui">
-        <div id="topBar">
-            <div>
-                <span class="team-blue">BLUE: <span id="blueUnits">0</span> units | Commander: <span id="blueCommander">100%</span></span>
-            </div>
-            <div>
-                Zoom: <span id="zoomLevel">1.0x</span> | FPS: <span id="fps">0</span> | Time: <span id="gameTime">0:00</span>
-            </div>
-            <div>
-                <span class="team-red">RED: <span id="redUnits">0</span> units | Commander: <span id="redCommander">100%</span></span>
-            </div>
-        </div>
-        
-        <div id="eventLog">
-            <h3 style="margin: 0 0 10px 0;">Battle Events</h3>
-            <div id="events"></div>
-        </div>
-        
-        <div id="resourceBar">
-            <h3 style="margin: 0 0 10px 0;">Resources</h3>
-            <div class="resource-display">
-                <span class="team-blue">Blue Mass:</span>
-                <span id="blueMass">1000</span>
-            </div>
-            <div class="resource-display">
-                <span class="team-blue">Blue Energy:</span>
-                <span id="blueEnergy">1000</span>
-            </div>
-            <div class="resource-display">
-                <span class="team-red">Red Mass:</span>
-                <span id="redMass">1000</span>
-            </div>
-            <div class="resource-display">
-                <span class="team-red">Red Energy:</span>
-                <span id="redEnergy">1000</span>
-            </div>
-        </div>
-        
-        <canvas id="minimap"></canvas>
-        
-        <div id="controls">
-            <h3>Controls</h3>
-            <p>Mouse Wheel: Zoom (0.1x - 1000x)</p>
-            <p>Click & Drag: Pan camera</p>
-            <p>F: First Person View</p>
-            <p>C: Auto Camera (follow action)</p>
-            <p>Space: Pause/Resume</p>
-            <p>R: Restart Battle</p>
-        </div>
-        
-        <div id="fpvMode">
-            <h3>First Person View</h3>
-            <p>ESC to exit</p>
-        </div>
-        
-        <div id="statusWindow">
-            <h3>Status Report</h3>
-            <div id="statusContent"></div>
-        </div>
-        
-        <div id="introspection"></div>
-    </div>
-    
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const minimap = document.getElementById('minimap');
-        const minimapCtx = minimap.getContext('2d');
-        
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        minimap.width = 200;
-        minimap.height = 200;
-        
-        // Game constants
-        const WORLD_SIZE = 5000;
-        const TILE_SIZE = 50;
-        const GRID_SIZE = WORLD_SIZE / TILE_SIZE;
-        
-        // Resources
-        const resources = {
-            blue: { mass: 1000, energy: 1000, massIncome: 0, energyIncome: 0 },
-            red: { mass: 1000, energy: 1000, massIncome: 0, energyIncome: 0 }
-        };
-        
-        // Game state
-        let camera = {
-            x: WORLD_SIZE / 2,
-            y: WORLD_SIZE / 2,
-            zoom: 1.0,
-            minZoom: 0.1,
-            maxZoom: 1000,
-            autoCamera: true,
-            cameraTarget: null,
-            cameraTimer: 0
-        };
-        
-        let gameState = {
-            paused: false,
-            selectedUnit: null,
-            fpvMode: false,
-            winner: null,
-            gameTime: 0,
-            events: [],
-            lastEventTime: 0,
-            hoveredEntity: null,
-            mouseX: 0,
-            mouseY: 0,
-            battleIntensity: 0,
-            economicStrength: { blue: 0, red: 0 },
-            armyStrength: { blue: 0, red: 0 }
-        };
-        
-        // Terrain generation
-        const terrain = [];
-        const resourceNodes = [];
-        const TERRAIN_TYPES = {
-            WATER: 0,
-            LAND: 1,
-            MOUNTAIN: 2
-        };
-        
-        function generateTerrain() {
-            // Generate base terrain
-            for (let x = 0; x < GRID_SIZE; x++) {
-                terrain[x] = [];
-                for (let y = 0; y < GRID_SIZE; y++) {
-                    const noise1 = Math.sin(x * 0.05) * Math.cos(y * 0.05);
-                    const noise2 = Math.sin(x * 0.1 + 100) * Math.cos(y * 0.1 + 100) * 0.5;
-                    const noise = noise1 + noise2 + Math.random() * 0.3;
-                    
-                    if (noise < -0.2) {
-                        terrain[x][y] = TERRAIN_TYPES.WATER;
-                    } else if (noise > 0.6) {
-                        terrain[x][y] = TERRAIN_TYPES.MOUNTAIN;
-                    } else {
-                        terrain[x][y] = TERRAIN_TYPES.LAND;
-                    }
-                }
-            }
-            
-            // Generate resource nodes
-            for (let i = 0; i < 30; i++) {
-                const x = Math.random() * WORLD_SIZE;
-                const y = Math.random() * WORLD_SIZE;
-                const type = Math.random() < 0.5 ? 'mass' : 'energy';
-                resourceNodes.push({
-                    x: x,
-                    y: y,
-                    type: type,
-                    amount: 10000,
-                    maxAmount: 10000,
-                    occupied: false
-                });
-            }
-        }
-        
-        // Event system
-        function addEvent(type, message, importance = 1) {
-            const event = {
-                type: type,
-                message: message,
-                time: gameState.gameTime,
-                importance: importance
-            };
-            
-            gameState.events.unshift(event);
-            if (gameState.events.length > 10) {
-                gameState.events.pop();
-            }
-            
-            // Update event log
-            const eventLog = document.getElementById('events');
-            const eventDiv = document.createElement('div');
-            eventDiv.className = `event event-${type}`;
-            eventDiv.textContent = `[${formatTime(gameState.gameTime)}] ${message}`;
-            eventLog.insertBefore(eventDiv, eventLog.firstChild);
-            
-            if (eventLog.children.length > 10) {
-                eventLog.removeChild(eventLog.lastChild);
-            }
-            
-            // Set camera target for important events
-            if (importance >= 2 && camera.autoCamera && event.position) {
-                camera.cameraTarget = event.position;
-                camera.cameraTimer = 180; // 3 seconds
-            }
-            
-            // Return event for position tracking
-            return event;
-        }
-        
-        function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
-        }
-        
-        // Unit classes
-        class Unit {
+import { UNIT_TYPES } from '../config/unitTypes.js';
+import { BUILDING_TYPES } from '../config/buildingTypes.js';
+import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+// Note: Access to global arrays like 'captions', 'effects', 'buildings', 'resources', 'resourceNodes'
+// and functions like 'addEvent' will be addressed in subsequent refactoring steps.
+// For now, the Unit class methods will continue to reference these as if they are
+// in the same scope or global.
+
+class Unit {
             constructor(x, y, team, type) {
                 this.x = x;
                 this.y = y;
@@ -431,57 +29,73 @@
                 this.aggressiveness = Math.random(); // 0-1, affects targeting behavior
                 this.formation = null;
                 this.captionCooldown = 0;
+                this.constructionTask = null; // Initialize construction task
             }
-            
-            update(units, buildings) {
+
+            update(units, buildings) { // Pass other global arrays if they become local to main.js
                 // Shield regeneration
                 if (this.shields < this.maxShields) {
                     this.shields = Math.min(this.maxShields, this.shields + this.shieldRegen);
                 }
-                
+
                 // Support unit behavior
                 if (this.type.support) {
-                    this.performSupportRole(units, buildings);
-                    return;
+                    this.performSupportRole(units, buildings); // Potentially pass other globals like resourceNodes, resources, captions
+                    return; // If ACU is building, it returns from performSupportRole, otherwise other support logic runs.
                 }
-                
+
                 // Combat behavior with dynamic objectives
-                if (!this.target || this.target.hp <= 0 || 
+                if (!this.target || this.target.hp <= 0 ||
                     (Date.now() - this.lastTargetSwitch > 5000 && Math.random() < 0.1)) {
-                    this.findTarget(units, buildings);
+                    this.findTarget(units, buildings); // Pass other globals if needed
                     this.lastTargetSwitch = Date.now();
                 }
-                
+
                 // Patrol or raid behavior
                 if (Math.random() < 0.005) {
                     if (this.aggressiveness > 0.7) {
                         // Aggressive units seek enemy base
-                        const enemyCommander = buildings.find(b => b.team !== this.team && b.type.name === 'Commander');
-                        if (enemyCommander) {
-                            this.patrolTarget = { x: enemyCommander.x + (Math.random() - 0.5) * 500, 
-                                                 y: enemyCommander.y + (Math.random() - 0.5) * 500 };
+                        // This assumes `buildings` array is available in this scope or passed.
+                        // If `UNIT_TYPES.commander` is used for comparison, it's fine.
+                        const enemyCommanderBuilding = buildings.find(b => b.team !== this.team && b.type.name === 'Commander'); // This might refer to old building commander
+                        const enemyCommanderUnit = units.find(u => u.team !== this.team && u.type === UNIT_TYPES.commander);
+
+
+                        if (enemyCommanderUnit) {
+                             this.patrolTarget = { x: enemyCommanderUnit.x + (Math.random() - 0.5) * 500,
+                                                 y: enemyCommanderUnit.y + (Math.random() - 0.5) * 500 };
+                        } else if (enemyCommanderBuilding) { // Fallback for old logic if any commander buildings still exist
+                             this.patrolTarget = { x: enemyCommanderBuilding.x + (Math.random() - 0.5) * 500,
+                                                 y: enemyCommanderBuilding.y + (Math.random() - 0.5) * 500 };
                         }
                     } else if (this.aggressiveness < 0.3) {
                         // Defensive units patrol home base
-                        const friendlyCommander = buildings.find(b => b.team === this.team && b.type.name === 'Commander');
-                        if (friendlyCommander) {
-                            this.patrolTarget = { x: friendlyCommander.x + (Math.random() - 0.5) * 300,
-                                                 y: friendlyCommander.y + (Math.random() - 0.5) * 300 };
+                        const friendlyCommanderUnit = units.find(u => u.team === this.team && u.type === UNIT_TYPES.commander);
+                        const friendlyCommanderBuilding = buildings.find(b => b.team === this.team && b.type.name === 'Commander'); // Fallback
+
+                        if (friendlyCommanderUnit) {
+                            this.patrolTarget = { x: friendlyCommanderUnit.x + (Math.random() - 0.5) * 300,
+                                                 y: friendlyCommanderUnit.y + (Math.random() - 0.5) * 300 };
+                        } else if (friendlyCommanderBuilding) {
+                             this.patrolTarget = { x: friendlyCommanderBuilding.x + (Math.random() - 0.5) * 300,
+                                                 y: friendlyCommanderBuilding.y + (Math.random() - 0.5) * 300 };
                         }
                     } else {
-                        // Neutral units patrol resource points
-                        const targetNode = resourceNodes[Math.floor(Math.random() * resourceNodes.length)];
-                        if (targetNode) {
-                            this.patrolTarget = { x: targetNode.x, y: targetNode.y };
+                        // Neutral units patrol resource points (assumes resourceNodes is global or passed)
+                        if (resourceNodes && resourceNodes.length > 0) {
+                            const targetNode = resourceNodes[Math.floor(Math.random() * resourceNodes.length)];
+                            if (targetNode) {
+                                this.patrolTarget = { x: targetNode.x, y: targetNode.y };
+                            }
                         }
                     }
                 }
-                
+
                 if (this.target) {
                     const dx = this.target.x - this.x;
                     const dy = this.target.y - this.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    
+
                     if (dist > this.type.range) {
                         this.angle = Math.atan2(dy, dx);
                         this.vx = Math.cos(this.angle) * this.type.speed;
@@ -490,7 +104,7 @@
                         this.vx = 0;
                         this.vy = 0;
                         if (this.cooldown <= 0) {
-                            this.attack(this.target);
+                            this.attack(this.target); // Assumes 'effects' is global or passed for new Effect
                             this.cooldown = this.type.attackSpeed;
                         }
                     }
@@ -499,7 +113,7 @@
                     const dx = this.patrolTarget.x - this.x;
                     const dy = this.patrolTarget.y - this.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    
+
                     if (dist > 50) {
                         this.angle = Math.atan2(dy, dx);
                         this.vx = Math.cos(this.angle) * this.type.speed * 0.8;
@@ -511,16 +125,14 @@
                     // Wander behavior with formation tendency
                     if (Math.random() < 0.02) {
                         this.angle += (Math.random() - 0.5) * 0.5;
-                        
-                        // Try to stay near friendly units
-                        const nearbyFriendly = units.filter(u => 
-                            u.team === this.team && 
-                            u !== this && 
+
+                        const nearbyFriendly = units.filter(u =>
+                            u.team === this.team &&
+                            u !== this &&
                             this.getDistance(u) < 200
                         );
-                        
+
                         if (nearbyFriendly.length > 0) {
-                            // Move towards group center
                             const centerX = nearbyFriendly.reduce((sum, u) => sum + u.x, 0) / nearbyFriendly.length;
                             const centerY = nearbyFriendly.reduce((sum, u) => sum + u.y, 0) / nearbyFriendly.length;
                             const toCenterAngle = Math.atan2(centerY - this.y, centerX - this.x);
@@ -530,26 +142,103 @@
                     this.vx = Math.cos(this.angle) * this.type.speed * 0.5;
                     this.vy = Math.sin(this.angle) * this.type.speed * 0.5;
                 }
-                
-                // Apply movement
-                this.applyMovement();
-                
+
+                this.applyMovement(); // Uses TILE_SIZE, GRID_SIZE, terrain (global or passed)
+
                 if (this.cooldown > 0) this.cooldown--;
                 if (this.captionCooldown > 0) this.captionCooldown--;
-                
-                // Show state captions
+
                 if (this.captionCooldown <= 0 && Math.random() < 0.01) {
-                    this.showStateCaption();
+                    this.showStateCaption(); // Assumes 'captions' is global or passed for new Caption
                 }
             }
-            
-            performSupportRole(units, buildings) {
-                if (this.type.name === 'Engineer') {
-                    // Find damaged buildings or unoccupied resource nodes
+
+            performSupportRole(units, buildings) { // Assumes globals: UNIT_TYPES, resources, BUILDING_TYPES, TILE_SIZE, GRID_SIZE, terrain, resourceNodes, captions, addEvent
+                if (this.type === UNIT_TYPES.commander) {
+                    if (!this.constructionTask && this.type.buildList && this.type.buildList.length > 0) {
+                        const buildingToBuildType = this.type.buildList[0];
+
+                        if (buildingToBuildType && resources[this.team].mass >= buildingToBuildType.cost.mass &&
+                            resources[this.team].energy >= buildingToBuildType.cost.energy) {
+
+                            const buildOffsets = [
+                                { dx: 100, dy: 0 }, { dx: -100, dy: 0 },
+                                { dx: 0, dy: 100 }, { dx: 0, dy: -100 },
+                                { dx: 150, dy: 150 }, { dx: -150, dy: -150 }
+                            ];
+
+                            for (const offset of buildOffsets) {
+                                const buildX = this.x + offset.dx;
+                                const buildY = this.y + offset.dy;
+                                const tileX = Math.floor(buildX / TILE_SIZE);
+                                const tileY = Math.floor(buildY / TILE_SIZE);
+
+                                if (tileX >= 0 && tileX < GRID_SIZE && tileY >= 0 && tileY < GRID_SIZE &&
+                                    terrain[tileX][tileY] === TERRAIN_TYPES.LAND) {
+
+                                    let isSpotClear = true;
+                                    for (const b of buildings) {
+                                        const dist = Math.sqrt((b.x - buildX)**2 + (b.y - buildY)**2);
+                                        if (dist < (b.type.size / 2 + buildingToBuildType.size / 2)) {
+                                            isSpotClear = false;
+                                            break;
+                                        }
+                                    }
+
+                                    if (isSpotClear) {
+                                        this.constructionTask = {
+                                            targetX: buildX,
+                                            targetY: buildY,
+                                            type: buildingToBuildType,
+                                            progress: 0,
+                                            buildingStarted: false
+                                        };
+                                        console.log(`${this.team} ACU starting task to build ${buildingToBuildType.name} at ${buildX.toFixed(0)},${buildY.toFixed(0)}`);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (this.constructionTask) {
+                        if (!this.constructionTask.buildingStarted) {
+                            const targetPos = { x: this.constructionTask.targetX, y: this.constructionTask.targetY };
+                            const distToSite = this.getDistance(targetPos);
+                            const requiredDist = (this.constructionTask.type.size / 2) + (this.type.size / 2) + 20;
+
+                            if (distToSite > requiredDist) {
+                                this.moveTowards(targetPos);
+                            } else {
+                                resources[this.team].mass -= this.constructionTask.type.cost.mass;
+                                resources[this.team].energy -= this.constructionTask.type.cost.energy;
+                                this.constructionTask.buildingStarted = true;
+                                this.vx = 0; this.vy = 0;
+                                captions.push(new Caption(this.constructionTask.targetX, this.constructionTask.targetY, `Constructing ${this.constructionTask.type.name}`, '#0f0', 10));
+                                console.log(`${this.team} ACU arrived at site, starting construction of ${this.constructionTask.type.name}`);
+                            }
+                        } else {
+                            this.constructionTask.progress += (this.type.buildRate || 1.0);
+                             if (this.captionCooldown <= 0 && Math.random() < 0.05) {
+                                const progressPercent = Math.floor((this.constructionTask.progress / this.constructionTask.type.buildTime) * 100);
+                                captions.push(new Caption(this.x, this.y - this.type.size -10, `Build: ${progressPercent}%`, '#FFF', 8));
+                                this.captionCooldown = 30;
+                            }
+
+                            if (this.constructionTask.progress >= this.constructionTask.type.buildTime) {
+                                const newBuilding = new Building(this.constructionTask.targetX, this.constructionTask.targetY, this.team, this.constructionTask.type);
+                                buildings.push(newBuilding); // Assumes 'Building' class is available
+                                addEvent('build', `${this.team.toUpperCase()} ACU completed ${this.constructionTask.type.name}!`, 2);
+                                console.log(`${this.team} ACU completed ${this.constructionTask.type.name}`);
+                                this.constructionTask = null;
+                            }
+                        }
+                        return;
+                    }
+                } else if (this.type.name === 'Engineer') {
                     let target = null;
                     let minDist = Infinity;
-                    
-                    // Check for damaged buildings
+
                     for (const building of buildings) {
                         if (building.team === this.team && building.hp < building.maxHp) {
                             const dist = this.getDistance(building);
@@ -559,8 +248,7 @@
                             }
                         }
                     }
-                    
-                    // Check for resource nodes
+
                     if (!target) {
                         for (const node of resourceNodes) {
                             if (!node.occupied && node.amount > 0) {
@@ -572,32 +260,28 @@
                             }
                         }
                     }
-                    
+
                     if (target) {
                         this.moveTowards(target);
                         if (minDist < 100) {
                             if (target.hp !== undefined) {
-                                // Repair building
                                 target.hp = Math.min(target.maxHp, target.hp + 2);
                             } else if (target.amount !== undefined && !target.occupied) {
-                                // Build extractor
                                 target.occupied = true;
-                                buildings.push(new Building(target.x, target.y, this.team, 
+                                buildings.push(new Building(target.x, target.y, this.team,
                                     target.type === 'mass' ? BUILDING_TYPES.massExtractor : BUILDING_TYPES.energyExtractor));
-                                const event = addEvent('resource', 
+                                const event = addEvent('resource',
                                     `${this.team.toUpperCase()} built ${target.type} extractor`, 2);
                                 event.position = { x: target.x, y: target.y };
                             }
                         }
                     } else {
-                        // Follow friendly units
                         const friendly = units.find(u => u.team === this.team && u !== this && !u.type.support);
                         if (friendly) {
                             this.moveTowards(friendly);
                         }
                     }
                 } else if (this.type.name === 'Shield Generator') {
-                    // Project shields to nearby units
                     for (const unit of units) {
                         if (unit.team === this.team && unit !== this) {
                             const dist = this.getDistance(unit);
@@ -608,13 +292,13 @@
                     }
                 }
             }
-            
+
             moveTowards(target) {
                 const dx = target.x - this.x;
                 const dy = target.y - this.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                
-                if (dist > 50) {
+
+                if (dist > 50) { // Keep a small distance, or use target.type.size if available
                     this.angle = Math.atan2(dy, dx);
                     this.vx = Math.cos(this.angle) * this.type.speed;
                     this.vy = Math.sin(this.angle) * this.type.speed;
@@ -622,87 +306,88 @@
                     this.vx = 0;
                     this.vy = 0;
                 }
-                
+
                 this.applyMovement();
             }
-            
+
             applyMovement() {
                 const newX = this.x + this.vx;
                 const newY = this.y + this.vy;
                 const tileX = Math.floor(newX / TILE_SIZE);
                 const tileY = Math.floor(newY / TILE_SIZE);
-                
-                if (tileX >= 0 && tileX < GRID_SIZE && tileY >= 0 && tileY < GRID_SIZE) {
+
+                if (tileX >= 0 && tileX < GRID_SIZE && tileY >= 0 && tileY < GRID_SIZE && terrain[tileX]) { // Added terrain[tileX] check
                     const terrainType = terrain[tileX][tileY];
-                    
+
                     if ((this.type.domain === 'land' && terrainType !== TERRAIN_TYPES.WATER) ||
                         (this.type.domain === 'sea' && terrainType === TERRAIN_TYPES.WATER) ||
                         (this.type.domain === 'air')) {
                         this.x = newX;
                         this.y = newY;
                     } else {
-                        this.angle += Math.PI * 0.5;
+                        this.angle += Math.PI * 0.5; // Turn away from invalid terrain
                     }
                 }
-                
+
                 this.x = Math.max(0, Math.min(WORLD_SIZE, this.x));
                 this.y = Math.max(0, Math.min(WORLD_SIZE, this.y));
             }
-            
-            findTarget(units, buildings) {
+
+            findTarget(units, buildings) { // Pass other globals if needed
                 let closestDist = Infinity;
                 let closest = null;
-                let priorityTarget = null;
-                
-                // Priority targeting based on unit personality
+
                 for (const unit of units) {
                     if (unit.team !== this.team && unit.hp > 0 && !unit.type.support) {
                         const dist = this.getDistance(unit);
-                        
-                        // High-value target bonus
                         let adjustedDist = dist;
-                        if (unit.type.tier >= 2) adjustedDist *= 0.7; // Prefer high tier units
-                        if (unit.type.support) adjustedDist *= 0.8; // Target support units
-                        
+                        if (unit.type.tier >= 2) adjustedDist *= 0.7;
+                        if (unit.type.support) adjustedDist *= 0.8;
+
                         if (adjustedDist < closestDist) {
                             closestDist = adjustedDist;
                             closest = unit;
                         }
                     }
                 }
-                
+
                 for (const building of buildings) {
                     if (building.team !== this.team && building.hp > 0) {
                         const dist = this.getDistance(building);
                         let priority = 1;
-                        
-                        // Strategic targeting
+
                         if (building.type.name === 'Commander') priority = 0.5;
-                        else if (building.type.resourceGeneration) priority = 0.7; // Target economy
-                        else if (building.type.produces && this.aggressiveness > 0.5) priority = 0.8; // Target production
-                        
+                        else if (building.type.resourceGeneration) priority = 0.7;
+                        else if (building.type.produces && this.aggressiveness > 0.5) priority = 0.8;
+
                         if (dist * priority < closestDist) {
                             closestDist = dist * priority;
                             closest = building;
                         }
                     }
                 }
-                
                 this.target = closest;
             }
-            
+
             getDistance(other) {
                 const dx = other.x - this.x;
                 const dy = other.y - this.y;
                 return Math.sqrt(dx * dx + dy * dy);
             }
-            
-            showStateCaption() {
+
+            showStateCaption() { // Assumes 'captions' is global or passed
                 let caption = '';
                 let color = '#fff';
-                
+
                 if (this.type.support) {
-                    if (this.type.name === 'Engineer') {
+                     if (this.type === UNIT_TYPES.commander && this.constructionTask) {
+                        if (this.constructionTask.buildingStarted) {
+                             const progressPercent = Math.floor((this.constructionTask.progress / this.constructionTask.type.buildTime) * 100);
+                             caption = `Build: ${progressPercent}%`; color = '#0f0';
+                        } else {
+                            caption = `Moving to build`; color = '#ff0';
+                        }
+                    } else if (this.type.name === 'Engineer') {
                         caption = this.target ? 'Repairing' : 'Seeking resources';
                         color = '#0f0';
                     } else if (this.type.name === 'Shield Generator') {
@@ -732,15 +417,14 @@
                     caption = 'Searching';
                     color = '#888';
                 }
-                
+
                 if (caption) {
                     captions.push(new Caption(this.x, this.y - this.type.size, caption, color, 10));
-                    this.captionCooldown = 120 + Math.random() * 120; // 2-4 seconds
+                    this.captionCooldown = 120 + Math.random() * 120;
                 }
             }
-            
-            attack(target) {
-                // Deal damage to shields first
+
+            attack(target) { // Assumes 'effects' is global or passed
                 let damage = this.type.damage;
                 if (target.shields > 0) {
                     const shieldDamage = Math.min(damage, target.shields);
@@ -748,35 +432,32 @@
                     damage -= shieldDamage;
                 }
                 target.hp -= damage;
-                
+
                 effects.push(new Effect(this.x, this.y, target.x, target.y, this.type.effectColor));
-                
-                // Log significant attacks with position data
-                if (target.type && target.type.name === 'Commander' && Math.random() < 0.1) {
-                    const event = addEvent('battle', 
+
+                if (target.type && target.type.name === 'Commander' && Math.random() < 0.1) { // Check target.type first
+                    const event = addEvent('battle',
                         `${this.team.toUpperCase()} forces attacking enemy Commander!`, 3);
                     event.position = { x: target.x, y: target.y };
-                } else if (Math.random() < 0.01 && target.type && target.type.tier >= 2) {
-                    const event = addEvent('battle', 
+                } else if (Math.random() < 0.01 && target.type && target.type.tier >= 2) { // Check target.type first
+                    const event = addEvent('battle',
                         `Major engagement: ${this.type.name} vs ${target.type.name}`, 2);
                     event.position = { x: this.x, y: this.y };
                 }
             }
-            
-            takeDamage(damage) {
+
+            takeDamage(damage) { // Assumes 'captions' is global or passed
                 if (this.shields > 0) {
                     const shieldDamage = Math.min(damage, this.shields);
                     this.shields -= shieldDamage;
                     damage -= shieldDamage;
-                    
-                    // Shield hit caption
+
                     if (shieldDamage > 0 && Math.random() < 0.3) {
                         captions.push(new Caption(this.x, this.y, 'Shields holding!', '#0ff', 8));
                     }
                 }
                 this.hp -= damage;
-                
-                // Damage caption
+
                 if (damage > 0 && Math.random() < 0.2) {
                     if (this.hp < this.maxHp * 0.3) {
                         captions.push(new Caption(this.x, this.y, 'Critical damage!', '#f00', 10));
@@ -785,30 +466,27 @@
                     }
                 }
             }
-            
+
             draw(ctx, camera) {
                 const screenX = (this.x - camera.x) * camera.zoom + canvas.width / 2;
                 const screenY = (this.y - camera.y) * camera.zoom + canvas.height / 2;
                 const size = this.type.size * camera.zoom;
-                
+
                 if (screenX < -size || screenX > canvas.width + size ||
                     screenY < -size || screenY > canvas.height + size) {
                     return;
                 }
-                
+
                 ctx.save();
                 ctx.translate(screenX, screenY);
                 ctx.rotate(this.angle);
-                
-                // Unit body
+
                 ctx.fillStyle = this.team === 'blue' ? '#44f' : '#f44';
                 ctx.fillRect(-size/2, -size/2, size, size);
-                
-                // Unit type indicator
+
                 ctx.fillStyle = this.type.color;
                 ctx.fillRect(-size/4, -size/4, size/2, size/2);
-                
-                // Shield effect
+
                 if (this.shields > 0) {
                     ctx.strokeStyle = '#0ff';
                     ctx.globalAlpha = 0.3 + (this.shields / this.maxShields) * 0.3;
@@ -818,26 +496,24 @@
                     ctx.stroke();
                     ctx.globalAlpha = 1;
                 }
-                
-                // Health bar
+
                 if (this.hp < this.maxHp) {
                     ctx.fillStyle = '#000';
                     ctx.fillRect(-size/2, -size/2 - 8, size, 4);
                     ctx.fillStyle = '#0f0';
                     ctx.fillRect(-size/2, -size/2 - 8, size * (this.hp / this.maxHp), 4);
                 }
-                
-                // Selection indicator
+
                 if (this.selected) {
                     ctx.strokeStyle = '#ff0';
                     ctx.lineWidth = 2;
                     ctx.strokeRect(-size/2 - 5, -size/2 - 5, size + 10, size + 10);
                 }
-                
+
                 ctx.restore();
             }
         }
-        
+
         class Building {
             constructor(x, y, team, type) {
                 this.x = x;
@@ -854,86 +530,77 @@
                 this.maxShields = 0;
                 this.captionCooldown = 0;
             }
-            
-            update(units) {
-                // Resource generation
+
+            update(units) { // Assumes globals: resources, UNIT_TYPES, captions, addEvent
                 if (this.type.resourceGeneration) {
                     resources[this.team][this.type.resourceGeneration.type] += this.type.resourceGeneration.amount;
-                    resources[this.team][this.type.resourceGeneration.type + 'Income'] = 
-                        this.type.resourceGeneration.amount * 60; // Per minute display
+                    resources[this.team][this.type.resourceGeneration.type + 'Income'] =
+                        this.type.resourceGeneration.amount * 60;
                 }
-                
-                // Auto-production with resource check
+
                 if (this.type.produces && this.productionQueue.length === 0) {
                     const unitTypes = this.type.produces.filter(unitType => {
                         return resources[this.team].mass >= (unitType.cost?.mass || 0) &&
                                resources[this.team].energy >= (unitType.cost?.energy || 0);
                     });
-                    
+
                     if (unitTypes.length > 0 && Math.random() < 0.02) {
                         const unitType = unitTypes[Math.floor(Math.random() * unitTypes.length)];
                         this.productionQueue.push(unitType);
-                        
-                        // Deduct resources
+
                         if (unitType.cost) {
                             resources[this.team].mass -= unitType.cost.mass || 0;
                             resources[this.team].energy -= unitType.cost.energy || 0;
                         }
                     }
                 }
-                
-                // Production progress
+
                 if (this.productionQueue.length > 0) {
                     this.productionProgress++;
-                    
-                    // Production caption
+
                     if (this.captionCooldown <= 0 && Math.random() < 0.01) {
                         const progress = Math.floor((this.productionProgress / this.productionQueue[0].buildTime) * 100);
-                        captions.push(new Caption(this.x, this.y - this.type.size, 
+                        captions.push(new Caption(this.x, this.y - this.type.size,
                             `Building ${this.productionQueue[0].name} ${progress}%`, '#ff0', 10));
                         this.captionCooldown = 90;
                     }
-                    
+
                     if (this.productionProgress >= this.productionQueue[0].buildTime) {
                         const unitType = this.productionQueue.shift();
-                        const unit = new Unit(this.rallyx, this.rallyy, this.team, unitType);
+                        const unit = new Unit(this.rallyx, this.rallyy, this.team, unitType); // Assumes Unit class is available
                         units.push(unit);
                         this.productionProgress = 0;
-                        
-                        // Completion caption
-                        captions.push(new Caption(this.x, this.y - this.type.size, 
+
+                        captions.push(new Caption(this.x, this.y - this.type.size,
                             `${unitType.name} ready!`, '#0f0', 12));
-                        
+
                         if (unitType.name === 'Experimental' || unitType.tier === 3) {
-                            const event = addEvent('build', 
+                            const event = addEvent('build',
                                 `${this.team.toUpperCase()} completed ${unitType.name}!`, 3);
                             event.position = { x: this.x, y: this.y };
                         }
                     }
                 }
-                
+
                 if (this.captionCooldown > 0) this.captionCooldown--;
             }
-            
+
             draw(ctx, camera) {
                 const screenX = (this.x - camera.x) * camera.zoom + canvas.width / 2;
                 const screenY = (this.y - camera.y) * camera.zoom + canvas.height / 2;
                 const size = this.type.size * camera.zoom;
-                
+
                 if (screenX < -size || screenX > canvas.width + size ||
                     screenY < -size || screenY > canvas.height + size) {
                     return;
                 }
-                
-                // Building base
+
                 ctx.fillStyle = this.team === 'blue' ? '#226' : '#622';
                 ctx.fillRect(screenX - size/2, screenY - size/2, size, size);
-                
-                // Building type
+
                 ctx.fillStyle = this.type.color;
                 ctx.fillRect(screenX - size/3, screenY - size/3, size*2/3, size*2/3);
-                
-                // Resource extractor animation
+
                 if (this.type.resourceGeneration) {
                     ctx.save();
                     ctx.translate(screenX, screenY);
@@ -949,31 +616,27 @@
                     ctx.stroke();
                     ctx.restore();
                 }
-                
-                // Health bar
+
                 if (this.hp < this.maxHp) {
                     ctx.fillStyle = '#000';
                     ctx.fillRect(screenX - size/2, screenY - size/2 - 10, size, 5);
                     ctx.fillStyle = '#0f0';
                     ctx.fillRect(screenX - size/2, screenY - size/2 - 10, size * (this.hp / this.maxHp), 5);
                 }
-                
-                // Production progress
+
                 if (this.productionQueue.length > 0) {
                     ctx.fillStyle = '#ff0';
-                    ctx.fillRect(screenX - size/2, screenY + size/2 + 5, 
+                    ctx.fillRect(screenX - size/2, screenY + size/2 + 5,
                                 size * (this.productionProgress / this.productionQueue[0].buildTime), 3);
                 }
-                
-                // Commander indicator
-                if (this.type.name === 'Commander') {
+
+                if (this.type.name === 'Commander') { // This specific check might be for old building-based commander
                     ctx.strokeStyle = '#ff0';
                     ctx.lineWidth = 3;
                     ctx.beginPath();
                     ctx.arc(screenX, screenY, size * 0.7, 0, Math.PI * 2);
                     ctx.stroke();
-                    
-                    // Commander shield
+
                     if (this.shields > 0) {
                         ctx.strokeStyle = '#0ff';
                         ctx.globalAlpha = 0.5;
@@ -986,318 +649,13 @@
                 }
             }
         }
-        
-        class Effect {
-            constructor(x1, y1, x2, y2, color) {
-                this.x1 = x1;
-                this.y1 = y1;
-                this.x2 = x2;
-                this.y2 = y2;
-                this.color = color;
-                this.life = 10;
-                this.particles = [];
-                
-                // Create impact particles
-                for (let i = 0; i < 5; i++) {
-                    this.particles.push({
-                        x: x2,
-                        y: y2,
-                        vx: (Math.random() - 0.5) * 10,
-                        vy: (Math.random() - 0.5) * 10,
-                        life: 20
-                    });
-                }
-            }
-            
-            update() {
-                this.life--;
-                
-                for (const particle of this.particles) {
-                    particle.x += particle.vx;
-                    particle.y += particle.vy;
-                    particle.vx *= 0.9;
-                    particle.vy *= 0.9;
-                    particle.life--;
-                }
-            }
-            
-            draw(ctx, camera) {
-                const screenX1 = (this.x1 - camera.x) * camera.zoom + canvas.width / 2;
-                const screenY1 = (this.y1 - camera.y) * camera.zoom + canvas.height / 2;
-                const screenX2 = (this.x2 - camera.x) * camera.zoom + canvas.width / 2;
-                const screenY2 = (this.y2 - camera.y) * camera.zoom + canvas.height / 2;
-                
-                // Projectile trail
-                ctx.strokeStyle = this.color;
-                ctx.globalAlpha = this.life / 10;
-                ctx.lineWidth = 2 * camera.zoom;
-                ctx.beginPath();
-                ctx.moveTo(screenX1, screenY1);
-                ctx.lineTo(screenX2, screenY2);
-                ctx.stroke();
-                
-                // Impact particles
-                for (const particle of this.particles) {
-                    if (particle.life > 0) {
-                        const px = (particle.x - camera.x) * camera.zoom + canvas.width / 2;
-                        const py = (particle.y - camera.y) * camera.zoom + canvas.height / 2;
-                        ctx.fillStyle = this.color;
-                        ctx.globalAlpha = particle.life / 20;
-                        ctx.fillRect(px - 2, py - 2, 4, 4);
-                    }
-                }
-                
-                ctx.globalAlpha = 1;
-            }
-        }
-        
-        // Unit types
-        const UNIT_TYPES = {
-            // Land units
-            tank: {
-                name: 'Tank',
-                domain: 'land',
-                size: 10,
-                speed: 1,
-                maxHp: 100,
-                damage: 20,
-                range: 150,
-                attackSpeed: 30,
-                buildTime: 60,
-                color: '#888',
-                effectColor: '#ff0',
-                cost: { mass: 100, energy: 50 },
-                tier: 1
-            },
-            bot: {
-                name: 'Bot',
-                domain: 'land',
-                size: 6,
-                speed: 2,
-                maxHp: 50,
-                damage: 10,
-                range: 100,
-                attackSpeed: 20,
-                buildTime: 30,
-                color: '#aaa',
-                effectColor: '#f80',
-                cost: { mass: 50, energy: 25 },
-                tier: 1
-            },
-            artillery: {
-                name: 'Artillery',
-                domain: 'land',
-                size: 12,
-                speed: 0.5,
-                maxHp: 80,
-                damage: 50,
-                range: 300,
-                attackSpeed: 60,
-                buildTime: 90,
-                color: '#666',
-                effectColor: '#f00',
-                cost: { mass: 150, energy: 100 },
-                tier: 2
-            },
-            // Sea units
-            battleship: {
-                name: 'Battleship',
-                domain: 'sea',
-                size: 20,
-                speed: 0.8,
-                maxHp: 200,
-                damage: 40,
-                range: 250,
-                attackSpeed: 40,
-                buildTime: 120,
-                color: '#048',
-                effectColor: '#0ff',
-                cost: { mass: 200, energy: 150 },
-                tier: 2
-            },
-            submarine: {
-                name: 'Submarine',
-                domain: 'sea',
-                size: 15,
-                speed: 1.2,
-                maxHp: 120,
-                damage: 30,
-                range: 200,
-                attackSpeed: 35,
-                buildTime: 80,
-                color: '#026',
-                effectColor: '#088',
-                cost: { mass: 120, energy: 80 },
-                tier: 1
-            },
-            // Air units
-            fighter: {
-                name: 'Fighter',
-                domain: 'air',
-                size: 8,
-                speed: 4,
-                maxHp: 60,
-                damage: 15,
-                range: 150,
-                attackSpeed: 15,
-                buildTime: 50,
-                color: '#ccc',
-                effectColor: '#fff',
-                cost: { mass: 80, energy: 60 },
-                tier: 1
-            },
-            bomber: {
-                name: 'Bomber',
-                domain: 'air',
-                size: 12,
-                speed: 2,
-                maxHp: 100,
-                damage: 60,
-                range: 100,
-                attackSpeed: 50,
-                buildTime: 100,
-                color: '#999',
-                effectColor: '#ff8',
-                cost: { mass: 150, energy: 120 },
-                tier: 2
-            },
-            gunship: {
-                name: 'Gunship',
-                domain: 'air',
-                size: 10,
-                speed: 3,
-                maxHp: 80,
-                damage: 25,
-                range: 120,
-                attackSpeed: 20,
-                buildTime: 70,
-                color: '#bbb',
-                effectColor: '#f8f',
-                cost: { mass: 100, energy: 80 },
-                tier: 1
-            },
-            // Support units
-            engineer: {
-                name: 'Engineer',
-                domain: 'land',
-                size: 8,
-                speed: 1.5,
-                maxHp: 60,
-                damage: 0,
-                range: 0,
-                attackSpeed: 0,
-                buildTime: 40,
-                color: '#0f0',
-                effectColor: '#0f0',
-                cost: { mass: 80, energy: 40 },
-                support: true,
-                tier: 1
-            },
-            shieldGenerator: {
-                name: 'Shield Generator',
-                domain: 'land',
-                size: 14,
-                speed: 0.7,
-                maxHp: 150,
-                damage: 0,
-                range: 0,
-                attackSpeed: 0,
-                buildTime: 80,
-                color: '#0ff',
-                effectColor: '#0ff',
-                cost: { mass: 120, energy: 200 },
-                support: true,
-                shields: 100,
-                shieldRegen: 2,
-                tier: 2
-            },
-            // T3 units
-            experimental: {
-                name: 'Experimental',
-                domain: 'land',
-                size: 25,
-                speed: 0.5,
-                maxHp: 500,
-                damage: 100,
-                range: 200,
-                attackSpeed: 40,
-                buildTime: 300,
-                color: '#f0f',
-                effectColor: '#f0f',
-                cost: { mass: 500, energy: 400 },
-                shields: 200,
-                shieldRegen: 5,
-                tier: 3
-            }
-        };
-        
-        const BUILDING_TYPES = {
-            commander: {
-                name: 'Commander',
-                size: 30,
-                maxHp: 1000,
-                produces: null,
-                color: '#ff0',
-                resourceGeneration: { type: 'mass', amount: 1 }
-            },
-            landFactory: {
-                name: 'Land Factory',
-                size: 40,
-                maxHp: 500,
-                produces: [UNIT_TYPES.tank, UNIT_TYPES.bot, UNIT_TYPES.artillery, UNIT_TYPES.engineer, UNIT_TYPES.shieldGenerator],
-                color: '#840',
-                cost: { mass: 200, energy: 100 }
-            },
-            advancedLandFactory: {
-                name: 'Advanced Land Factory',
-                size: 50,
-                maxHp: 700,
-                produces: [UNIT_TYPES.artillery, UNIT_TYPES.shieldGenerator, UNIT_TYPES.experimental],
-                color: '#a60',
-                cost: { mass: 400, energy: 300 }
-            },
-            airFactory: {
-                name: 'Air Factory',
-                size: 40,
-                maxHp: 400,
-                produces: [UNIT_TYPES.fighter, UNIT_TYPES.bomber, UNIT_TYPES.gunship],
-                color: '#888',
-                cost: { mass: 150, energy: 120 }
-            },
-            navalFactory: {
-                name: 'Naval Factory',
-                size: 50,
-                maxHp: 600,
-                produces: [UNIT_TYPES.battleship, UNIT_TYPES.submarine],
-                color: '#048',
-                cost: { mass: 250, energy: 150 }
-            },
-            massExtractor: {
-                name: 'Mass Extractor',
-                size: 20,
-                maxHp: 200,
-                produces: null,
-                color: '#888',
-                resourceGeneration: { type: 'mass', amount: 2 },
-                cost: { mass: 50, energy: 25 }
-            },
-            energyExtractor: {
-                name: 'Energy Plant',
-                size: 20,
-                maxHp: 150,
-                produces: null,
-                color: '#ff0',
-                resourceGeneration: { type: 'energy', amount: 3 },
-                cost: { mass: 30, energy: 20 }
-            }
-        };
-        
+
         // Game entities
         let units = [];
         let buildings = [];
         let effects = [];
         let captions = [];
-        
+
         // Caption class for flyover text
         class Caption {
             constructor(x, y, text, color = '#fff', size = 12) {
@@ -1310,17 +668,17 @@
                 this.vy = -0.5; // Float upward
                 this.alpha = 1;
             }
-            
+
             update() {
                 this.y += this.vy;
                 this.life--;
                 this.alpha = Math.min(1, this.life / 20);
             }
-            
+
             draw(ctx, camera) {
                 const screenX = (this.x - camera.x) * camera.zoom + canvas.width / 2;
                 const screenY = (this.y - camera.y) * camera.zoom + canvas.height / 2;
-                
+
                 ctx.save();
                 ctx.globalAlpha = this.alpha;
                 ctx.fillStyle = this.color;
@@ -1333,7 +691,7 @@
                 ctx.restore();
             }
         }
-        
+
         // Initialize game
         function initGame() {
             units = [];
@@ -1343,66 +701,119 @@
             gameState.winner = null;
             gameState.gameTime = 0;
             gameState.events = [];
-            
+
             // Reset resources
             resources.blue = { mass: 1000, energy: 1000, massIncome: 0, energyIncome: 0 };
             resources.red = { mass: 1000, energy: 1000, massIncome: 0, energyIncome: 0 };
-            
-            generateTerrain();
-            
-            // Place commanders
-            const blueStart = findLandPosition(WORLD_SIZE * 0.2, WORLD_SIZE * 0.5);
-            const redStart = findLandPosition(WORLD_SIZE * 0.8, WORLD_SIZE * 0.5);
 
-            buildings.push(new Building(blueStart.x, blueStart.y, 'blue', BUILDING_TYPES.commander));
-            buildings.push(new Building(redStart.x, redStart.y, 'red', BUILDING_TYPES.commander));
+            let blueStart = null;
+            let redStart = null;
+            const MAX_INIT_RETRIES = 10; // Max retries for finding start positions
+            const COMMANDER_START_AREA_SIZE = 5; // Commanders need a 5x5 clear land area
 
-            // Place initial factories
-            placeFactoriesAroundCommander(blueStart, 'blue');
-            placeFactoriesAroundCommander(redStart, 'red');
+            console.log("Initializing game, attempting to generate terrain and find starting positions...");
 
-            // Add some initial engineers
-            units.push(new Unit(blueStart.x + 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
-            units.push(new Unit(blueStart.x - 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
-            units.push(new Unit(redStart.x + 50, redStart.y, 'red', UNIT_TYPES.engineer));
-            units.push(new Unit(redStart.x - 50, redStart.y, 'red', UNIT_TYPES.engineer));
-            
+            for (let i = 0; i < MAX_INIT_RETRIES; i++) {
+                console.log(`Attempt ${i + 1}/${MAX_INIT_RETRIES} to generate terrain and find start spots.`);
+                generateTerrain(); // This function now handles its own land percentage retries
+
+                blueStart = findLandPosition(WORLD_SIZE * 0.2, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
+                redStart = findLandPosition(WORLD_SIZE * 0.8, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
+
+                if (blueStart && redStart) {
+                    console.log(`Successfully found starting positions for both teams after ${i + 1} attempt(s).`);
+                    break;
+                } else {
+                    console.warn(`Could not find suitable ${COMMANDER_START_AREA_SIZE}x${COMMANDER_START_AREA_SIZE} starting areas. Blue found: ${!!blueStart}, Red found: ${!!redStart}. Regenerating terrain...`);
+                }
+            }
+
+            if (!blueStart) {
+                console.error(`CRITICAL: Failed to find suitable starting position for BLUE team after ${MAX_INIT_RETRIES} attempts. Placing at default fallback.`);
+                blueStart = { x: WORLD_SIZE * 0.2, y: WORLD_SIZE * 0.5 }; // Fallback
+            }
+            if (!redStart) {
+                console.error(`CRITICAL: Failed to find suitable starting position for RED team after ${MAX_INIT_RETRIES} attempts. Placing at default fallback.`);
+                redStart = { x: WORLD_SIZE * 0.8, y: WORLD_SIZE * 0.5 }; // Fallback
+            }
+
+            // Spawn ACU units
+            if (UNIT_TYPES.commander) {
+                units.push(new Unit(blueStart.x, blueStart.y, 'blue', UNIT_TYPES.commander));
+                units.push(new Unit(redStart.x, redStart.y, 'red', UNIT_TYPES.commander));
+                addEvent('strategic', 'Commanders deployed!', 3);
+            } else {
+                console.error("UNIT_TYPES.commander is not defined! Cannot spawn ACUs.");
+            }
+
+            // Comment out old commander building spawning
+            // buildings.push(new Building(blueStart.x, blueStart.y, 'blue', BUILDING_TYPES.commander));
+            // buildings.push(new Building(redStart.x, redStart.y, 'red', BUILDING_TYPES.commander));
+
+            // Comment out initial factory placement
+            // console.log("Placing initial factories...");
+            // placeFactoriesAroundCommander(blueStart, 'blue');
+            // placeFactoriesAroundCommander(redStart, 'red');
+
+            // Comment out initial engineer spawning
+            // units.push(new Unit(blueStart.x + 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
+            // units.push(new Unit(blueStart.x - 50, blueStart.y, 'blue', UNIT_TYPES.engineer));
+            // units.push(new Unit(redStart.x + 50, redStart.y, 'red', UNIT_TYPES.engineer));
+            // units.push(new Unit(redStart.x - 50, redStart.y, 'red', UNIT_TYPES.engineer));
+
             // Center camera
             camera.x = WORLD_SIZE / 2;
             camera.y = WORLD_SIZE / 2;
             camera.zoom = 0.5;
-            
+
             addEvent('strategic', 'Battle commenced!', 3);
         }
-        
-        function findLandPosition(targetX, targetY) {
-            let bestX = targetX;
-            let bestY = targetY;
+
+        function isAreaClear(gridX, gridY, size, terrainType) {
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const x = gridX + i;
+                    const y = gridY + j;
+                    // Check bounds and terrain type
+                    if (x >= GRID_SIZE || y >= GRID_SIZE || !terrain[x] || terrain[x][y] === undefined || terrain[x][y] !== terrainType) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function findLandPosition(targetX, targetY, minAreaSize = 3) {
+            let bestCandidate = null;
             let minDist = Infinity;
-            
-            for (let x = 0; x < GRID_SIZE; x++) {
-                for (let y = 0; y < GRID_SIZE; y++) {
-                    if (terrain[x][y] === TERRAIN_TYPES.LAND) {
-                        const worldX = x * TILE_SIZE + TILE_SIZE / 2;
-                        const worldY = y * TILE_SIZE + TILE_SIZE / 2;
-                        const dist = Math.sqrt((worldX - targetX) ** 2 + (worldY - targetY) ** 2);
-                        if (dist < minDist) {
-                            minDist = dist;
-                            bestX = worldX;
-                            bestY = worldY;
+
+            for (let x = 0; x <= GRID_SIZE - minAreaSize; x++) { // Iterate to ensure area fits
+                for (let y = 0; y <= GRID_SIZE - minAreaSize; y++) { // Iterate to ensure area fits
+                    // Check the top-left tile first for efficiency
+                    if (terrain[x] && terrain[x][y] === TERRAIN_TYPES.LAND) {
+                        if (isAreaClear(x, y, minAreaSize, TERRAIN_TYPES.LAND)) {
+                            // Calculate the center of the found clear area
+                            const areaCenterX = (x + minAreaSize / 2) * TILE_SIZE;
+                            const areaCenterY = (y + minAreaSize / 2) * TILE_SIZE;
+
+                            const dist = Math.sqrt((areaCenterX - targetX) ** 2 + (areaCenterY - targetY) ** 2);
+
+                            if (dist < minDist) {
+                                minDist = dist;
+                                bestCandidate = { x: areaCenterX, y: areaCenterY };
+                            }
                         }
                     }
                 }
             }
-
-            return { x: bestX, y: bestY };
+            return bestCandidate; // Returns null if no suitable area is found
         }
-        
+
         function findWaterPosition(targetX, targetY) {
             let bestX = targetX;
             let bestY = targetY;
             let minDist = Infinity;
-            
+
             for (let x = 0; x < GRID_SIZE; x++) {
                 for (let y = 0; y < GRID_SIZE; y++) {
                     if (terrain[x][y] === TERRAIN_TYPES.WATER) {
@@ -1417,39 +828,61 @@
                     }
                 }
             }
-            
+
             return { x: bestX, y: bestY };
         }
-        
+
         function placeFactoriesAroundCommander(commanderPos, team) {
-            const offset = 150;
+            const offset = 150; // Preferred distance from commander for factories
+            const factoryAreaSize = 3; // Factories need a 3x3 clear land area
+            let landPos, airPos, navalPos, energyPos1;
 
             // Land factory
-            const landPos = findLandPosition(commanderPos.x + offset, commanderPos.y);
-            buildings.push(new Building(landPos.x, landPos.y, team, BUILDING_TYPES.landFactory));
-            
-            // Air factory
-            const airPos = findLandPosition(commanderPos.x - offset, commanderPos.y);
-            buildings.push(new Building(airPos.x, airPos.y, team, BUILDING_TYPES.airFactory));
-            
-            // Naval factory (if water nearby)
-            const navalPos = findWaterPosition(commanderPos.x, commanderPos.y + offset);
-            const dist = Math.sqrt((navalPos.x - commanderPos.x) ** 2 + (navalPos.y - commanderPos.y) ** 2);
-            if (dist < 500) {
-                buildings.push(new Building(navalPos.x, navalPos.y, team, BUILDING_TYPES.navalFactory));
+            landPos = findLandPosition(commanderPos.x + offset, commanderPos.y, factoryAreaSize);
+            if (!landPos) landPos = findLandPosition(commanderPos.x - offset, commanderPos.y, factoryAreaSize); // Try other side
+            if (!landPos) {
+                console.warn(`Could not find ideal spot for Land Factory for ${team}, placing at fallback.`);
+                landPos = { x: commanderPos.x + offset, y: commanderPos.y };
             }
-            
+            buildings.push(new Building(landPos.x, landPos.y, team, BUILDING_TYPES.landFactory));
+
+            // Air factory
+            airPos = findLandPosition(commanderPos.x - offset, commanderPos.y - offset, factoryAreaSize); // Try diagonal
+            if (!airPos) airPos = findLandPosition(commanderPos.x + offset, commanderPos.y + offset, factoryAreaSize); // Try other diagonal
+            if (!airPos) {
+                console.warn(`Could not find ideal spot for Air Factory for ${team}, placing at fallback.`);
+                airPos = { x: commanderPos.x - offset, y: commanderPos.y - offset };
+            }
+            buildings.push(new Building(airPos.x, airPos.y, team, BUILDING_TYPES.airFactory));
+
+            // Naval factory (if water nearby)
+            navalPos = findWaterPosition(commanderPos.x, commanderPos.y + offset * 1.5); // Place further out
+            if (navalPos && navalPos.x !== undefined && navalPos.y !== undefined) { // Check if a valid water position was found
+                 const distToCommander = Math.sqrt((navalPos.x - commanderPos.x) ** 2 + (navalPos.y - commanderPos.y) ** 2);
+                 if (distToCommander < 700) { // Ensure it's reasonably close
+                    buildings.push(new Building(navalPos.x, navalPos.y, team, BUILDING_TYPES.navalFactory));
+                 } else {
+                    console.log(`Naval factory position for ${team} was too far from commander (${distToCommander.toFixed(0)} units), skipping.`);
+                 }
+            } else {
+                console.log(`No suitable water position found for Naval factory for ${team}.`);
+            }
+
             // Energy plants
-            const energyPos1 = findLandPosition(commanderPos.x, commanderPos.y - offset);
+            energyPos1 = findLandPosition(commanderPos.x, commanderPos.y - offset, factoryAreaSize);
+            if (!energyPos1) {
+                console.warn(`Could not find ideal spot for Energy Plant for ${team}, placing at fallback.`);
+                energyPos1 = { x: commanderPos.x, y: commanderPos.y - offset};
+            }
             buildings.push(new Building(energyPos1.x, energyPos1.y, team, BUILDING_TYPES.energyExtractor));
         }
-        
+
         // Game loop
         function update() {
             if (gameState.paused || gameState.winner) return;
-            
+
             gameState.gameTime += 1/60;
-            
+
             // Update auto camera
             if (camera.autoCamera && camera.cameraTarget && camera.cameraTimer > 0) {
                 const dx = camera.cameraTarget.x - camera.x;
@@ -1457,12 +890,12 @@
                 camera.x += dx * 0.1;
                 camera.y += dy * 0.1;
                 camera.cameraTimer--;
-                
+
                 if (camera.cameraTimer <= 0) {
                     camera.cameraTarget = null;
                 }
             }
-            
+
             // Random event focus
             if (camera.autoCamera && !camera.cameraTarget && Math.random() < 0.005) {
                 // Focus on random combat or building
@@ -1473,18 +906,27 @@
                     camera.cameraTimer = 180;
                 }
             }
-            
+
             // Update units
             for (let i = units.length - 1; i >= 0; i--) {
                 const unit = units[i];
                 unit.update(units, buildings);
-                
+
                 if (unit.hp <= 0) {
-                    if (unit.type.tier >= 2) {
-                        const event = addEvent('battle', 
+                    // Check if the destroyed unit is an ACU
+                    if (unit.type === UNIT_TYPES.commander) {
+                        gameState.winner = unit.team === 'blue' ? 'RED' : 'BLUE';
+                        captions.push(new Caption(unit.x, unit.y, `${unit.team.toUpperCase()} COMMANDER DESTROYED!`, '#ff0', 20));
+                        const event = addEvent('strategic', `${gameState.winner} achieves victory! ${unit.team.toUpperCase()} ACU eliminated.`, 3);
+                        event.position = { x: unit.x, y: unit.y };
+                        // No need to splice here if the game ends, but if we want post-victory gameplay, keep splice.
+                        // For now, the main update loop will stop if gameState.winner is set.
+                    } else if (unit.type.tier >= 2) { // Log destruction of other significant units
+                        const event = addEvent('battle',
                             `${unit.team.toUpperCase()} ${unit.type.name} destroyed!`, 2);
                         event.position = { x: unit.x, y: unit.y };
                     }
+
                     units.splice(i, 1);
                     if (unit === gameState.selectedUnit) {
                         gameState.selectedUnit = null;
@@ -1492,30 +934,30 @@
                     }
                 }
             }
-            
+
             // Update buildings
             for (let i = buildings.length - 1; i >= 0; i--) {
                 const building = buildings[i];
                 building.update(units);
-                
+
                 if (building.hp <= 0) {
                     // Check if commander died
-                    if (building.type.name === 'Commander') {
+                    if (building.type.name === 'Commander') { // This check is now effectively dead code as Commander is a Unit
                         gameState.winner = building.team === 'blue' ? 'RED' : 'BLUE';
                         captions.push(new Caption(building.x, building.y, 'COMMANDER DESTROYED!', '#ff0', 20));
-                        const event = addEvent('strategic', 
+                        const event = addEvent('strategic',
                             `${gameState.winner} achieves victory!`, 3);
                         event.position = { x: building.x, y: building.y };
                     } else if (building.type.produces || building.type.resourceGeneration) {
                         captions.push(new Caption(building.x, building.y, 'Structure lost!', '#f88', 12));
-                        const event = addEvent('battle', 
+                        const event = addEvent('battle',
                             `${building.team.toUpperCase()} ${building.type.name} destroyed!`, 2);
                         event.position = { x: building.x, y: building.y };
                     }
                     buildings.splice(i, 1);
                 }
             }
-            
+
             // Update effects
             for (let i = effects.length - 1; i >= 0; i--) {
                 effects[i].update();
@@ -1523,7 +965,7 @@
                     effects.splice(i, 1);
                 }
             }
-            
+
             // Update captions
             for (let i = captions.length - 1; i >= 0; i--) {
                 captions[i].update();
@@ -1531,17 +973,17 @@
                     captions.splice(i, 1);
                 }
             }
-            
+
             // Strategic AI decisions
             if (Math.random() < 0.01) {
                 makeStrategicDecisions();
             }
-            
+
             // Coordinate group attacks
             if (Math.random() < 0.005) {
                 coordinateAttacks();
             }
-            
+
             // Update camera for FPV mode
             if (gameState.fpvMode && gameState.selectedUnit) {
                 camera.x = gameState.selectedUnit.x;
@@ -1549,25 +991,31 @@
                 camera.zoom = 10;
             }
         }
-        
+
         function makeStrategicDecisions() {
             // Check if teams should build advanced factories
             for (const team of ['blue', 'red']) {
                 const teamBuildings = buildings.filter(b => b.team === team);
                 const hasAdvanced = teamBuildings.some(b => b.type.name === 'Advanced Land Factory');
-                
+
                 if (!hasAdvanced && resources[team].mass > 500 && Math.random() < 0.1) {
-                    const commander = teamBuildings.find(b => b.type.name === 'Commander');
-                    if (commander) {
-                        const pos = findLandPosition(commander.x + (Math.random() - 0.5) * 300, 
-                                                   commander.y + (Math.random() - 0.5) * 300);
-                        buildings.push(new Building(pos.x, pos.y, team, BUILDING_TYPES.advancedLandFactory));
-                        const event = addEvent('build', 
-                            `${team.toUpperCase()} constructs Advanced Factory!`, 2);
-                        event.position = { x: pos.x, y: pos.y };
+                    const commanderBuilding = teamBuildings.find(b => b.type.name === 'Commander'); // Old check
+                    const commanderUnit = units.find(u => u.team === team && u.type === UNIT_TYPES.commander);
+
+                    let commanderToBuildNear = commanderUnit || commanderBuilding; // Prefer unit
+
+                    if (commanderToBuildNear) {
+                        const pos = findLandPosition(commanderToBuildNear.x + (Math.random() - 0.5) * 300,
+                                                   commanderToBuildNear.y + (Math.random() - 0.5) * 300);
+                        if(pos) { // Ensure a position was found
+                            buildings.push(new Building(pos.x, pos.y, team, BUILDING_TYPES.advancedLandFactory));
+                            const event = addEvent('build',
+                                `${team.toUpperCase()} constructs Advanced Factory!`, 2);
+                            event.position = { x: pos.x, y: pos.y };
+                        }
                     }
                 }
-                
+
                 // Decide on raid groups
                 const teamUnits = units.filter(u => u.team === team && !u.type.support);
                 if (teamUnits.length > 10 && Math.random() < 0.05) {
@@ -1575,84 +1023,86 @@
                     const raidSize = Math.min(5 + Math.floor(Math.random() * 5), teamUnits.length / 2);
                     const raiders = teamUnits.slice(0, raidSize);
                     const enemyTargets = buildings.filter(b => b.team !== team && b.type.resourceGeneration);
-                    
+
                     if (enemyTargets.length > 0) {
                         const target = enemyTargets[Math.floor(Math.random() * enemyTargets.length)];
                         raiders.forEach(unit => {
                             unit.patrolTarget = { x: target.x, y: target.y };
                             unit.aggressiveness = 0.9;
                         });
-                        
-                        captions.push(new Caption(raiders[0].x, raiders[0].y, 
-                            `Raid group forming!`, '#f80', 12));
-                        
-                        const event = addEvent('strategic', 
+
+                        if(raiders.length > 0 && raiders[0]){
+                             captions.push(new Caption(raiders[0].x, raiders[0].y,
+                                `Raid group forming!`, '#f80', 12));
+                        }
+
+                        const event = addEvent('strategic',
                             `${team.toUpperCase()} launches raid on enemy economy!`, 2);
                         event.position = { x: target.x, y: target.y };
                     }
                 }
             }
         }
-        
+
         function coordinateAttacks() {
             // Group nearby units for coordinated attacks
             for (const team of ['blue', 'red']) {
                 const teamUnits = units.filter(u => u.team === team && !u.type.support);
-                
+
                 // Find clusters of units
                 const processed = new Set();
-                
+
                 for (const unit of teamUnits) {
                     if (processed.has(unit)) continue;
-                    
-                    const nearby = teamUnits.filter(u => 
-                        !processed.has(u) && 
+
+                    const nearby = teamUnits.filter(u =>
+                        !processed.has(u) &&
                         unit.getDistance(u) < 150
                     );
-                    
+
                     if (nearby.length >= 3) {
                         // Coordinate this group
                         const group = [unit, ...nearby];
                         group.forEach(u => processed.add(u));
-                        
+
                         // Find best target for group
-                        const enemies = [...units.filter(u => u.team !== team), 
+                        const enemies = [...units.filter(u => u.team !== team),
                                        ...buildings.filter(b => b.team !== team)];
-                        
+
                         if (enemies.length > 0) {
                             // Calculate group center
                             const centerX = group.reduce((sum, u) => sum + u.x, 0) / group.length;
                             const centerY = group.reduce((sum, u) => sum + u.y, 0) / group.length;
-                            
+
                             // Find high-value target
                             let bestTarget = null;
                             let bestScore = -Infinity;
-                            
+
                             for (const enemy of enemies) {
                                 const dist = Math.sqrt((enemy.x - centerX) ** 2 + (enemy.y - centerY) ** 2);
                                 let score = 1000 / (dist + 100);
-                                
-                                if (enemy.type) {
-                                    if (enemy.type.name === 'Commander') score *= 3;
+
+                                if (enemy.type) { // Check if enemy.type exists
+                                    if (enemy.type.name === UNIT_TYPES.commander.name) score *= 3; // Compare with commander unit type name
                                     else if (enemy.type.tier >= 2) score *= 2;
                                     else if (enemy.type.resourceGeneration) score *= 1.5;
                                 }
-                                
+
                                 if (score > bestScore) {
                                     bestScore = score;
                                     bestTarget = enemy;
                                 }
                             }
-                            
+
                             if (bestTarget) {
                                 // Assign target to group
                                 group.forEach(u => {
                                     u.target = bestTarget;
                                     u.lastTargetSwitch = Date.now();
                                 });
-                                
+
                                 // Group attack caption
-                                captions.push(new Caption(centerX, centerY, 
+                                captions.push(new Caption(centerX, centerY,
                                     `Coordinated strike!`, '#ff0', 14));
                             }
                         }
@@ -1660,125 +1110,128 @@
                 }
             }
         }
-        
+
         function render() {
             ctx.fillStyle = '#333';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
+
             // Draw terrain
             const startX = Math.floor((camera.x - canvas.width / 2 / camera.zoom) / TILE_SIZE);
             const endX = Math.ceil((camera.x + canvas.width / 2 / camera.zoom) / TILE_SIZE);
             const startY = Math.floor((camera.y - canvas.height / 2 / camera.zoom) / TILE_SIZE);
             const endY = Math.ceil((camera.y + canvas.height / 2 / camera.zoom) / TILE_SIZE);
-            
+
             for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
                 for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
                     const screenX = (x * TILE_SIZE - camera.x) * camera.zoom + canvas.width / 2;
                     const screenY = (y * TILE_SIZE - camera.y) * camera.zoom + canvas.height / 2;
                     const size = TILE_SIZE * camera.zoom;
-                    
-                    switch (terrain[x][y]) {
-                        case TERRAIN_TYPES.WATER:
-                            const wave = Math.sin(Date.now() * 0.001 + x * 0.5) * 0.1;
-                            ctx.fillStyle = `hsl(200, 50%, ${25 + wave * 10}%)`;
-                            break;
-                        case TERRAIN_TYPES.LAND:
-                            ctx.fillStyle = '#484';
-                            break;
-                        case TERRAIN_TYPES.MOUNTAIN:
-                            ctx.fillStyle = '#666';
-                            break;
+
+                    if(terrain[x] && terrain[x][y] !== undefined) { // Ensure terrain tile exists
+                        switch (terrain[x][y]) {
+                            case TERRAIN_TYPES.WATER:
+                                const wave = Math.sin(Date.now() * 0.001 + x * 0.5) * 0.1;
+                                ctx.fillStyle = `hsl(200, 50%, ${25 + wave * 10}%)`;
+                                break;
+                            case TERRAIN_TYPES.LAND:
+                                ctx.fillStyle = '#484';
+                                break;
+                            case TERRAIN_TYPES.MOUNTAIN:
+                                ctx.fillStyle = '#666';
+                                break;
+                        }
+                        ctx.fillRect(screenX, screenY, size + 1, size + 1);
                     }
-                    
-                    ctx.fillRect(screenX, screenY, size + 1, size + 1);
                 }
             }
-            
+
             // Draw resource nodes
             for (const node of resourceNodes) {
                 if (node.amount > 0) {
                     const screenX = (node.x - camera.x) * camera.zoom + canvas.width / 2;
                     const screenY = (node.y - camera.y) * camera.zoom + canvas.height / 2;
                     const size = 15 * camera.zoom;
-                    
+
                     ctx.fillStyle = node.type === 'mass' ? '#888' : '#ff0';
                     ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.003) * 0.2;
                     ctx.fillRect(screenX - size/2, screenY - size/2, size, size);
                     ctx.globalAlpha = 1;
-                    
+
                     if (!node.occupied) {
                         ctx.strokeStyle = node.type === 'mass' ? '#aaa' : '#ff8';
                         ctx.strokeRect(screenX - size/2, screenY - size/2, size, size);
                     }
                 }
             }
-            
+
             // Draw buildings
             for (const building of buildings) {
                 building.draw(ctx, camera);
             }
-            
+
             // Draw units
             for (const unit of units) {
                 unit.draw(ctx, camera);
             }
-            
+
             // Draw effects
             for (const effect of effects) {
                 effect.draw(ctx, camera);
             }
-            
+
             // Draw captions (on top of everything)
             for (const caption of captions) {
                 caption.draw(ctx, camera);
             }
-            
+
             // Draw minimap
             drawMinimap();
-            
+
             // Update UI
             updateUI();
-            
+
             // Victory screen
             if (gameState.winner) {
                 ctx.fillStyle = 'rgba(0,0,0,0.8)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
+
                 ctx.fillStyle = gameState.winner === 'BLUE' ? '#44f' : '#f44';
                 ctx.font = '72px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText(gameState.winner + ' WINS!', canvas.width / 2, canvas.height / 2);
-                
+
                 ctx.fillStyle = '#fff';
                 ctx.font = '24px Arial';
                 ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 60);
             }
         }
-        
+
         function drawMinimap() {
             // Clear minimap
             minimapCtx.fillStyle = '#000';
             minimapCtx.fillRect(0, 0, 200, 200);
-            
+
             // Draw terrain (simplified)
             const scale = 200 / GRID_SIZE;
             for (let x = 0; x < GRID_SIZE; x += 2) {
                 for (let y = 0; y < GRID_SIZE; y += 2) {
-                    switch (terrain[x][y]) {
-                        case TERRAIN_TYPES.WATER:
-                            minimapCtx.fillStyle = '#135';
-                            break;
-                        case TERRAIN_TYPES.LAND:
-                            minimapCtx.fillStyle = '#242';
-                            break;
-                        case TERRAIN_TYPES.MOUNTAIN:
-                            minimapCtx.fillStyle = '#444';
-                            break;
+                     if(terrain[x] && terrain[x][y] !== undefined) { // Ensure terrain tile exists
+                        switch (terrain[x][y]) {
+                            case TERRAIN_TYPES.WATER:
+                                minimapCtx.fillStyle = '#135';
+                                break;
+                            case TERRAIN_TYPES.LAND:
+                                minimapCtx.fillStyle = '#242';
+                                break;
+                            case TERRAIN_TYPES.MOUNTAIN:
+                                minimapCtx.fillStyle = '#444';
+                                break;
+                        }
+                        minimapCtx.fillRect(x * scale, y * scale, scale * 2, scale * 2);
                     }
-                    minimapCtx.fillRect(x * scale, y * scale, scale * 2, scale * 2);
                 }
             }
-            
+
             // Draw resource nodes
             for (const node of resourceNodes) {
                 if (node.amount > 0) {
@@ -1788,7 +1241,7 @@
                     minimapCtx.fillRect(mx - 1, my - 1, 2, 2);
                 }
             }
-            
+
             // Draw units on minimap
             for (const unit of units) {
                 minimapCtx.fillStyle = unit.team === 'blue' ? '#44f' : '#f44';
@@ -1796,21 +1249,22 @@
                 const my = (unit.y / WORLD_SIZE) * 200;
                 minimapCtx.fillRect(mx - 1, my - 1, 2, 2);
             }
-            
+
             // Draw buildings on minimap
             for (const building of buildings) {
                 minimapCtx.fillStyle = building.team === 'blue' ? '#88f' : '#f88';
                 const mx = (building.x / WORLD_SIZE) * 200;
                 const my = (building.y / WORLD_SIZE) * 200;
                 minimapCtx.fillRect(mx - 2, my - 2, 4, 4);
-                
-                // Highlight commanders
-                if (building.type.name === 'Commander') {
-                    minimapCtx.strokeStyle = '#ff0';
-                    minimapCtx.strokeRect(mx - 3, my - 3, 6, 6);
-                }
+
+                // Highlight commanders (if they were buildings)
+                // This logic is now dead if commanders are only units.
+                // if (building.type.name === 'Commander') {
+                //     minimapCtx.strokeStyle = '#ff0';
+                //    minimapCtx.strokeRect(mx - 3, my - 3, 6, 6);
+                // }
             }
-            
+
             // Draw camera viewport
             minimapCtx.strokeStyle = '#0ff';
             minimapCtx.lineWidth = 2;
@@ -1820,50 +1274,50 @@
             const viewHeight = (canvas.height / camera.zoom / WORLD_SIZE) * 200;
             minimapCtx.strokeRect(viewLeft, viewTop, viewWidth, viewHeight);
         }
-        
+
         function updateUI() {
             // Count units
             const blueUnits = units.filter(u => u.team === 'blue').length;
             const redUnits = units.filter(u => u.team === 'red').length;
-            
+
             document.getElementById('blueUnits').textContent = blueUnits;
             document.getElementById('redUnits').textContent = redUnits;
-            
+
             // Commander health
-            const blueCommander = buildings.find(b => b.team === 'blue' && b.type.name === 'Commander');
-            const redCommander = buildings.find(b => b.team === 'red' && b.type.name === 'Commander');
-            
-            document.getElementById('blueCommander').textContent = blueCommander ? 
+            const blueCommander = units.find(u => u.team === 'blue' && u.type === UNIT_TYPES.commander);
+            const redCommander = units.find(u => u.team === 'red' && u.type === UNIT_TYPES.commander);
+
+            document.getElementById('blueCommander').textContent = blueCommander ?
                 Math.round(blueCommander.hp / blueCommander.maxHp * 100) + '%' : 'DESTROYED';
-            document.getElementById('redCommander').textContent = redCommander ? 
+            document.getElementById('redCommander').textContent = redCommander ?
                 Math.round(redCommander.hp / redCommander.maxHp * 100) + '%' : 'DESTROYED';
-            
+
             // Resources
             document.getElementById('blueMass').textContent = Math.floor(resources.blue.mass);
             document.getElementById('blueEnergy').textContent = Math.floor(resources.blue.energy);
             document.getElementById('redMass').textContent = Math.floor(resources.red.mass);
             document.getElementById('redEnergy').textContent = Math.floor(resources.red.energy);
-            
+
             // Game time
             document.getElementById('gameTime').textContent = formatTime(gameState.gameTime);
-            
+
             // Zoom level
             document.getElementById('zoomLevel').textContent = camera.zoom.toFixed(1) + 'x';
-            
+
             // FPV mode indicator
             document.getElementById('fpvMode').style.display = gameState.fpvMode ? 'block' : 'none';
         }
-        
+
         // Input handling
         let mouseDown = false;
         let lastMouseX = 0;
         let lastMouseY = 0;
-        
+
         canvas.addEventListener('mousedown', (e) => {
             mouseDown = true;
             lastMouseX = e.clientX;
             lastMouseY = e.clientY;
-            
+
             // Check minimap click
             const rect = minimap.getBoundingClientRect();
             if (e.clientX >= rect.left && e.clientX <= rect.right &&
@@ -1875,12 +1329,12 @@
                 camera.autoCamera = false;
                 return;
             }
-            
+
             // Select unit
             if (!gameState.fpvMode) {
                 const worldX = (e.clientX - canvas.width / 2) / camera.zoom + camera.x;
                 const worldY = (e.clientY - canvas.height / 2) / camera.zoom + camera.y;
-                
+
                 gameState.selectedUnit = null;
                 for (const unit of units) {
                     const dist = Math.sqrt((unit.x - worldX) ** 2 + (unit.y - worldY) ** 2);
@@ -1893,7 +1347,7 @@
                 }
             }
         });
-        
+
         canvas.addEventListener('mousemove', (e) => {
             if (mouseDown && !gameState.fpvMode) {
                 const dx = e.clientX - lastMouseX;
@@ -1905,11 +1359,11 @@
                 lastMouseY = e.clientY;
             }
         });
-        
+
         canvas.addEventListener('mouseup', () => {
             mouseDown = false;
         });
-        
+
         canvas.addEventListener('wheel', (e) => {
             if (!gameState.fpvMode) {
                 const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
@@ -1918,7 +1372,7 @@
             }
             e.preventDefault();
         });
-        
+
         document.addEventListener('keydown', (e) => {
             switch(e.key.toLowerCase()) {
                 case ' ':
@@ -1943,12 +1397,12 @@
                     break;
             }
         });
-        
+
         // FPS counter
         let lastTime = 0;
         let fps = 0;
         let frameCount = 0;
-        
+
         function gameLoop(timestamp) {
             // Calculate FPS
             frameCount++;
@@ -1958,21 +1412,22 @@
                 lastTime = timestamp;
                 document.getElementById('fps').textContent = fps;
             }
-            
+
             update();
             render();
             requestAnimationFrame(gameLoop);
         }
-        
+
         // Window resize
         window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         });
-        
+
         // Start game
         initGame();
         requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
+[end of js/main.js]
