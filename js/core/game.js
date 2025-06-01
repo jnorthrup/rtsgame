@@ -336,8 +336,9 @@ export function update(gameContext) {
     // The Unit.update method expects (units, buildings)
     // These are available directly in gameContext.
     for (let i = gameContext.units.length - 1; i >= 0; i--) {
-        const unit = gameContext.units[i];
-        unit.update(gameContext.units, gameContext.buildings, gameContext); // Pass gameContext for globals like TILE_SIZE, TERRAIN_TYPES etc.
+        const unit = gameContext.units[i]; 
+        unit.update(gameContext); // Unit.update now only takes gameContext
+ 
 
         if (unit.hp <= 0) {
             if (unit.type === UNIT_TYPES.commander) { // UNIT_TYPES imported
