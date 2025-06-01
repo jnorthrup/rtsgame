@@ -132,8 +132,9 @@ const UNIT_TYPES = {
         color: '#0f0',
         effectColor: '#0f0',
         cost: { mass: 80, energy: 40 },
-        support: true,
+        support: true, 
         movementType: 'amphibious', // Added for Engineer
+ 
         tier: 1
     },
     shieldGenerator: {
@@ -186,10 +187,10 @@ const UNIT_TYPES = {
         tier: 2.5,
         support: true,
         buildList: [], // Populated dynamically in main.js after BUILDING_TYPES is loaded
-        buildRate: 1.0,
+        buildRate: 1.0, 
         shields: 200,
         shieldRegen: 2,
-        movementType: 'amphibious' // Added for Commander
+        movementType: 'amphibious' // Added for Commander 
     }
 };
 

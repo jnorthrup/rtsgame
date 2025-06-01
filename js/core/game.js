@@ -180,9 +180,9 @@ export function initGame(gameContext) {
 
     addEvent(gameContext, 'strategic', 'Battle commenced!', 3);
 }
-
+ 
 // AI and Strategic Functions are now imported from strategicAI.js
-
+ 
 export function update(gameContext) {
     if (gameContext.gameState.paused || gameContext.gameState.winner) return;
 
@@ -214,9 +214,10 @@ export function update(gameContext) {
     // Update units
     // The Unit.update method expects (units, buildings)
     // These are available directly in gameContext.
-    for (let i = gameContext.units.length - 1; i >= 0; i--) {
+    for (let i = gameContext.units.length - 1; i >= 0; i--) { 
         const unit = gameContext.units[i];
         unit.update(gameContext); // Unit.update now only takes gameContext
+ 
 
         if (unit.hp <= 0) {
             if (unit.type === UNIT_TYPES.commander) { // UNIT_TYPES imported

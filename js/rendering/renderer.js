@@ -157,10 +157,9 @@ export function render(gameContext) {
 
     for (const building of buildings) {
         building.draw(ctx, camera);
-    }
-
+    } 
     for (const unit of units) {
-        unit.draw(ctx, camera, gameContext); // Pass gameContext
+        unit.draw(ctx, camera, gameContext); // Pass gameContext 
     }
 
     for (const effect of effects) {
