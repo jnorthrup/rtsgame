@@ -8,6 +8,7 @@ import { Caption } from './core/caption.js';
 import { GrenadeProjectile } from './core/projectile.js'; // Added import
 import { initGame, gameLoop, addEvent as addEventFromGameJs, formatTime as formatTimeFromGameJs, performAoeDamage } from './core/game.js'; // Added performAoeDamage
 import { initInputHandling } from './input/inputHandler.js'; // Import input handling
+import SelectionManager from './ui/selectionManager.js'; // NEW IMPORT
 
 // --- Canvas and Contexts ---
 const canvas = document.getElementById('gameCanvas');
@@ -41,7 +42,7 @@ const camera = {
 
 const gameState = {
     paused: false,
-    selectedUnit: null,
+    // selectedUnit: null, // MANAGED BY SELECTION_MANAGER NOW - THIS LINE IS NOW REMOVED
     fpvMode: false,
     aimingGrenade: false,
     winner: null,
@@ -64,6 +65,9 @@ const effects = [];
 const captions = [];
 const projectiles = []; // Added projectiles array
 
+// NEW: Initialize SelectionManager
+const selectionManager = new SelectionManager();
+
 // --- Game Context Object ---
 // This object bundles all shared state and functionality to be passed to game modules.
 const gameContext = {
@@ -73,6 +77,8 @@ const gameContext = {
     resources, camera, gameState,
     terrain, resourceNodes,
     units, buildings, effects, captions, projectiles, // Added projectiles
+    // NEW: Selection Manager
+    selectionManager,
     // Imported Types & Constants (for convenience if needed by functions passed in context)
     UNIT_TYPES, BUILDING_TYPES,
     WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES,

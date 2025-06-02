@@ -4,10 +4,12 @@ import { WORLD_SIZE } from '../config/gameConstants.js'; // WORLD_SIZE is used i
 import { WindowManager, BorderLayoutContainer, BorderRegion, TextComponent } from '../ui/borderLayout.js';
 import { IntrospectionManager } from '../ui/talentRenderers.js';
 import { CommandStatusRenderer } from '../ui/commandStatusRenderer.js';
+import SelectionManager from '../ui/selectionManager.js'; // NEW IMPORT
 
 export function initInputHandling(gameContext) {
     // Destructure what's needed from gameContext for convenience
-    const { canvas, minimap, camera, gameState, units, initGame, addEvent, UNIT_TYPES } = gameContext;
+    // REMOVED gameState.selectedUnit as it's now managed by selectionManager
+    const { canvas, minimap, camera, gameState, units, buildings, initGame, addEvent, UNIT_TYPES, selectionManager } = gameContext;
 
     let mouseDown = false;
     let lastMouseX = 0;
@@ -31,13 +33,17 @@ export function initInputHandling(gameContext) {
                 return; // Window system consumed the click
             }
 
+            // Get currently selected entity from selection manager
+            const currentSelectedEntity = selectionManager.getSelected();
+
             if (gameState.aimingGrenade) {
                 if (e.button === 0) { // Left click
                     const worldX = (e.clientX - camera.canvasWidth / 2) / camera.zoom + camera.x;
                     const worldY = (e.clientY - camera.canvasHeight / 2) / camera.zoom + camera.y;
 
-                    if (gameState.selectedUnit && typeof gameState.selectedUnit.launchGrenade === 'function') {
-                        gameState.selectedUnit.launchGrenade(worldX, worldY, gameContext);
+                    // Use currentSelectedEntity from SelectionManager
+                    if (currentSelectedEntity && typeof currentSelectedEntity.launchGrenade === 'function') {
+                        currentSelectedEntity.launchGrenade(worldX, worldY, gameContext);
                     }
                     console.log(`Grenade targeted at ${worldX.toFixed(0)}, ${worldY.toFixed(0)}`);
                     gameState.aimingGrenade = false;
@@ -70,40 +76,45 @@ export function initInputHandling(gameContext) {
                 }
             }
 
-            // Select unit (if not in FPV mode and click is on main canvas)
+            // Select unit/building (if not in FPV mode and click is on main canvas)
             if (!gameState.fpvMode) {
                 const worldX = (e.clientX - camera.canvasWidth / 2) / camera.zoom + camera.x;
                 const worldY = (e.clientY - camera.canvasHeight / 2) / camera.zoom + camera.y;
 
-                gameState.selectedUnit = null;
                 let selectedObject = null;
 
                 // Check units first
-                units.forEach(unit => {
+                for (const unit of units) { // Use 'for...of' for potential early break
                     const dist = Math.sqrt((unit.x - worldX) ** 2 + (unit.y - worldY) ** 2);
                     if (dist < unit.type.size) { // Assuming unit.type.size is in world units
-                        gameState.selectedUnit = unit;
-                        unit.selected = true;
                         selectedObject = unit;
-                    } else {
-                        unit.selected = false;
+                        break; // Found a unit, prefer units over buildings
                     }
-                });
+                }
 
                 // Check buildings if no unit selected
-                if (!selectedObject && gameContext.buildings) {
-                    gameContext.buildings.forEach(building => {
+                if (!selectedObject) { // Only check buildings if no unit was selected
+                    for (const building of buildings) { // Use 'for...of' loop
                         const dist = Math.sqrt((building.x - worldX) ** 2 + (building.y - worldY) ** 2);
-                        if (dist < (building.type.size || 50)) {
+                        if (dist < (building.type.size || 50)) { // Assuming building.type.size or default
                             selectedObject = building;
+                            break;
                         }
-                    });
+                    }
+                }
+
+                // Update selection manager
+                if (selectedObject) {
+                    selectionManager.setSelected(selectedObject);
+                } else {
+                    selectionManager.clearSelection();
                 }
 
                 // Create introspection window for selected object (Ctrl+Click)
-                if (selectedObject && e.ctrlKey && gameContext.introspectionManager) {
+                const currentSelectionForIntrospection = selectionManager.getSelected(); // Re-get from manager
+                if (currentSelectionForIntrospection && e.ctrlKey && gameContext.introspectionManager) {
                     gameContext.introspectionManager.createIntrospectionWindow(
-                        selectedObject, 
+                        currentSelectionForIntrospection, 
                         e.clientX + 20, 
                         e.clientY + 20, 
                         gameContext
@@ -152,6 +163,9 @@ export function initInputHandling(gameContext) {
 
     // --- Document Event Listeners (Keyboard shortcuts) ---
     document.addEventListener('keydown', (e) => {
+        // Get selected entity from selection manager for key events
+        const selectedEntity = selectionManager.getSelected();
+
         switch (e.key.toLowerCase()) {
             case ' ':
                 gameState.paused = !gameState.paused;
@@ -160,7 +174,8 @@ export function initInputHandling(gameContext) {
                 initGame(gameContext); // initGame is from gameContext
                 break;
             case 'f':
-                if (gameState.selectedUnit) {
+                // Use selectedEntity from manager
+                if (selectedEntity && selectedEntity.type && selectedEntity.type.speed !== undefined) { // Check if it's a unit (has speed)
                     gameState.fpvMode = !gameState.fpvMode;
                 }
                 break;
@@ -171,9 +186,10 @@ export function initInputHandling(gameContext) {
                 }
                 break;
             case 'g':
-                if (gameState.selectedUnit &&
-                    gameState.selectedUnit.type === UNIT_TYPES.commander && // Check if selected is Commander
-                    (gameState.selectedUnit.grenadeCooldown === undefined || gameState.selectedUnit.grenadeCooldown <= 0)) { // Check cooldown (assume 0 or undefined if ready)
+                // Use selectedEntity from manager, ensure it's a commander unit
+                if (selectedEntity &&
+                    selectedEntity.type === UNIT_TYPES.commander && // Check if selected is Commander
+                    (selectedEntity.grenadeCooldown === undefined || selectedEntity.grenadeCooldown <= 0)) { // Check cooldown (assume 0 or undefined if ready)
                     gameState.aimingGrenade = true;
                     // TODO: Add visual feedback for aiming mode (e.g., cursor change)
                     console.log("Grenade aiming activated.");
@@ -199,13 +215,13 @@ export function initInputHandling(gameContext) {
                 break;
             case 'q':
                 // Create a unit inspector window
-                createUnitInspectorWindow(gameContext);
+                createUnitInspectorWindow(gameContext); // This function will now get the selected unit from selectionManager
                 break;
             case 'i':
                 // Create introspection window for selected object
-                if (gameState.selectedUnit && gameContext.introspectionManager) {
+                if (selectedEntity && gameContext.introspectionManager) { // Use selectedEntity from manager
                     gameContext.introspectionManager.createIntrospectionWindow(
-                        gameState.selectedUnit,
+                        selectedEntity,
                         200,
                         100,
                         gameContext
@@ -302,15 +318,18 @@ function createSampleWindow(gameContext) {
 }
 
 function createUnitInspectorWindow(gameContext) {
+    // Get selected entity from the selection manager
+    const selectedEntity = gameContext.selectionManager.getSelected();
+
     const window = new BorderLayoutContainer(200, 50, 350, 400, {
-        title: 'Unit Inspector',
+        title: 'Inspector', // Changed title to be more general
         backgroundColor: 'rgba(30, 40, 50, 0.95)',
         borderColor: '#888888'
     });
 
-    // Unit selection display
+    // Entity selection display
     window.addComponent(
-        new TextComponent('Selected Unit Info', { 
+        new TextComponent('Selected Entity Info', { // Updated title
             backgroundColor: 'rgba(50, 60, 70, 0.8)',
             alignment: 'center',
             fontSize: 11
@@ -318,28 +337,43 @@ function createUnitInspectorWindow(gameContext) {
         BorderRegion.NORTH
     );
 
-    // Unit stats
-    const selectedUnit = gameContext.gameState.selectedUnit;
-    let unitInfo = 'No unit selected';
-    if (selectedUnit) {
-        unitInfo = `Type: ${selectedUnit.type.name}\n` +
-                  `Team: ${selectedUnit.team.toUpperCase()}\n` +
-                  `HP: ${Math.ceil(selectedUnit.hp)}/${selectedUnit.maxHp}\n` +
-                  `Position: ${Math.floor(selectedUnit.x)}, ${Math.floor(selectedUnit.y)}\n` +
-                  `Speed: ${selectedUnit.type.speed}\n` +
-                  `Range: ${selectedUnit.type.range}`;
+    // Entity stats
+    let entityInfo = 'No entity selected';
+    if (selectedEntity) {
+        // Basic info common to both units and buildings (from summaries)
+        entityInfo = `Type: ${selectedEntity.type.name}\n` +
+                     `Team: ${selectedEntity.team.toUpperCase()}\n` +
+                     `HP: ${Math.ceil(selectedEntity.hp)}/${selectedEntity.maxHp}\n` +
+                     `Position: ${Math.floor(selectedEntity.x)}, ${Math.floor(selectedEntity.y)}`;
         
-        if (selectedUnit.shields > 0) {
-            unitInfo += `\nShields: ${Math.ceil(selectedUnit.shields)}/${selectedUnit.maxShields}`;
+        // Differentiate based on unique properties from summaries
+        // Unit has 'speed', 'range', 'shields', 'target'
+        // Building has 'productionQueue', 'productionProgress', 'resourceGeneration'
+        if (selectedEntity.type.speed !== undefined) { // Indicates a unit by checking for speed property
+            entityInfo += `\nSpeed: ${selectedEntity.type.speed}\n` +
+                          `Range: ${selectedEntity.type.range}`;
+            if (selectedEntity.shields !== undefined && selectedEntity.shields > 0) {
+                entityInfo += `\nShields: ${Math.ceil(selectedEntity.shields)}/${selectedEntity.maxShields}`;
+            }
+            if (selectedEntity.target) {
+                entityInfo += `\nTarget: ${selectedEntity.target.type ? selectedEntity.target.type.name : 'Position'}`;
+            }
+        } else if (selectedEntity.productionQueue !== undefined || selectedEntity.type.resourceGeneration !== undefined) { // Indicates a building by checking for production or resource generation properties
+            if (selectedEntity.productionQueue && selectedEntity.productionQueue.length > 0) {
+                entityInfo += `\nProducing: ${selectedEntity.productionQueue[0].name}`;
+            } else {
+                entityInfo += `\nProduction: Idle`;
+            }
+            // Check for resource generation properties directly if available in type
+            if (selectedEntity.type.resourceGeneration) {
+                entityInfo += `\nGenerating: ${selectedEntity.type.resourceGeneration.mass || 0} Mass, ${selectedEntity.type.resourceGeneration.energy || 0} Energy`;
+            }
         }
-        
-        if (selectedUnit.target) {
-            unitInfo += `\nTarget: ${selectedUnit.target.type ? selectedUnit.target.type.name : 'Position'}`;
-        }
+        // If it's something else with hp/type but not clearly unit/building, it just shows basic info.
     }
 
     window.addComponent(
-        new TextComponent(unitInfo, { 
+        new TextComponent(entityInfo, { 
             backgroundColor: 'rgba(40, 50, 60, 0.8)',
             fontSize: 10,
             padding: 10
@@ -347,9 +381,9 @@ function createUnitInspectorWindow(gameContext) {
         BorderRegion.CENTER
     );
 
-    // Commands
+    // Commands (generalized)
     window.addComponent(
-        new TextComponent('Unit Commands\n• Click to select\n• F for FPV mode\n• G for grenade (Commander)', { 
+        new TextComponent('Commands\n• Click to select\n• F for FPV mode (if unit selected)\n• G for grenade (if Commander selected)', { 
             backgroundColor: 'rgba(60, 50, 40, 0.8)',
             fontSize: 9,
             padding: 8
