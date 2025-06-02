@@ -5,7 +5,8 @@ const GRID_SIZE = WORLD_SIZE / TILE_SIZE; // Order is important here
 const TERRAIN_TYPES = {
     WATER: 0,
     LAND: 1,
-    MOUNTAIN: 2
+    MOUNTAIN: 2,
+    RESOURCE: 3 // New terrain type for resources
 };
 
 const MIN_LAND_PERCENTAGE = 0.3;

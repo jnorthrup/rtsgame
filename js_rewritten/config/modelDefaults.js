@@ -137,6 +137,16 @@ export const BUILDING_MODELS = {
 };
 
 // Default texture paths for terrain and effects
+export const TERRAIN_MODELS = {
+    resource: {
+        name: "Resource Deposit",
+        modelPath: "models/resource.obj",
+        scale: 0.05, // Adjust scale as needed for terrain
+        size: 50,
+        description: "A valuable resource deposit."
+    }
+};
+
 export const TERRAIN_TEXTURES = {
     water: "textures/water.png",
     land: "textures/land.png",
