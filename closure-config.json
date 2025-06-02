@@ -1,4 +1,5 @@
 {
+  "_DEPRECATED": "This Closure Compiler configuration is deprecated and scheduled for deletion. The project has standardized on Webpack (see webpack.config.js).",
   "entry_point": [
     "js_rewritten/core/simulation.js",
     "js_rewritten/rendering/webglRenderer.js", 

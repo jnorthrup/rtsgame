@@ -1,3 +1,11 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This entire file is deprecated and scheduled for deletion.                    #
+// #   The main browser entry point is now js/app.js.                                                 #
+// #   This file represented an old SVG-based rendering and simulation approach.                      #
+// #                                                                                                  #
+// ####################################################################################################
+
 const SVG_WIDTH = 800;
 const SVG_HEIGHT = 600;
 const GRID_SIZE = 10;

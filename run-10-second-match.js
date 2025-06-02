@@ -1,3 +1,13 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This script is deprecated and scheduled for deletion.                         #
+// #   It acts as a simple wrapper for `battle-simulator.js` with a fixed duration.                   #
+// #   For running short simulations:                                                                 #
+// #     - `battle-simulator.js` can be used directly if its configuration supports duration.         #
+// #     - `headless-node.js` can run the main simulation engine for any configured duration.         #
+// #                                                                                                  #
+// ####################################################################################################
+
 #!/usr/bin/env node
 
 import { BattleSimulator } from './battle-simulator.js';

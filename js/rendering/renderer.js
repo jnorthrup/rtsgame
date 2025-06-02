@@ -1,3 +1,12 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This entire file is deprecated and scheduled for deletion.                    #
+// #   Main rendering is now handled by js_rewritten/rendering/webglRenderer.js.                      #
+// #   Minimap rendering has been moved to js/ui/minimap_canvas2d.js.                                 #
+// #   The call to updateUI has been moved to the main game loop (e.g., js/main.js).                  #
+// #                                                                                                  #
+// ####################################################################################################
+
 import { TERRAIN_TYPES, TILE_SIZE, GRID_SIZE, WORLD_SIZE } from '../config/gameConstants.js'; // Import necessary constants
 // Building, Unit, Effect, Caption classes are not directly instantiated here,
 // but their instances (from gameContext) have .draw() methods called.

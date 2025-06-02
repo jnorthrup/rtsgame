@@ -1,3 +1,11 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This entire battle journal system is deprecated.                              #
+// #   The unified battle journal is now located at js/core/battleJournal.js.                         #
+// #   All systems should be updated to use the instance exported from js/core/battleJournal.js.      #
+// #                                                                                                  #
+// ####################################################################################################
+
 // js/ai/battleJournal.js
 class BattleJournal {
     constructor() {

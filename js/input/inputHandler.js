@@ -1,3 +1,9 @@
+// ####################################################################################################
+// #   DEPRECATION IN PROGRESS: This InputHandler is being refactored to delegate responsibilities    #
+// #   to the new InputManager (js/input/inputManager.js).                                          #
+// #   Eventually, this file might be removed or become a very thin layer.                            #
+// ####################################################################################################
+
 // Imports for functions that might be called, if not accessed via gameContext:
 // import { initGame, addEvent } from '../core/game.js'; // These will be on gameContext
 import { WORLD_SIZE } from '../config/gameConstants.js'; // WORLD_SIZE is used in minimap click
@@ -8,10 +14,9 @@ import SelectionManager from '../ui/selectionManager.js'; // NEW IMPORT
 
 export function initInputHandling(gameContext) {
     // Destructure what's needed from gameContext for convenience
-    // REMOVED gameState.selectedUnit as it's now managed by selectionManager
-    const { canvas, minimap, camera, gameState, units, buildings, initGame, addEvent, UNIT_TYPES, selectionManager } = gameContext;
+    const { canvas, minimap, camera, gameState, units, buildings, initGame, addEvent, UNIT_TYPES, selectionManager, inputManager } = gameContext; // Added inputManager
 
-    let mouseDown = false;
+    let mouseDown = false; // This state is for UI interaction like dragging within this handler, not camera panning.
     let lastMouseX = 0;
     let lastMouseY = 0;
 
@@ -79,50 +84,46 @@ export function initInputHandling(gameContext) {
                 }
             }
 
-            // Select unit/building (if not in FPV mode and click is on main canvas)
-            if (!gameState.fpvMode) {
+            // Left-click for selection (or other actions if aiming grenade)
+            if (e.button === 0) {
                 const worldX = (e.clientX - camera.canvasWidth / 2) / camera.zoom + camera.x;
                 const worldY = (e.clientY - camera.canvasHeight / 2) / camera.zoom + camera.y;
+                
+                // Grenade aiming takes precedence if active
+                if (gameState.aimingGrenade) {
+                    // Logic for launching grenade remains here for now, as it uses selectedEntity from selectionManager
+                    const currentSelectedEntity = selectionManager.getSelected();
+                    if (currentSelectedEntity && typeof currentSelectedEntity.launchGrenade === 'function') {
+                        currentSelectedEntity.launchGrenade(worldX, worldY, gameContext);
+                    }
+                    console.log(`Grenade targeted at ${worldX.toFixed(0)}, ${worldY.toFixed(0)}`);
+                    gameState.aimingGrenade = false;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
 
-                let selectedObject = null;
+                // If not aiming grenade and not in FPV, handle general left click via InputManager
+                if (!gameState.fpvMode) {
+                    inputManager.handleLeftClick(worldX, worldY, e.shiftKey);
 
-                // Check units first
-                for (const unit of units) { // Use 'for...of' for potential early break
-                    const dist = Math.sqrt((unit.x - worldX) ** 2 + (unit.y - worldY) ** 2);
-                    if (dist < unit.type.size) { // Assuming unit.type.size is in world units
-                        selectedObject = unit;
-                        break; // Found a unit, prefer units over buildings
+                    // Introspection window on Ctrl+Click is a UI feature, can remain here.
+                    // It uses selectionManager, which is not yet command-driven for UI feedback.
+                    const currentSelectionForIntrospection = selectionManager.getSelected(); 
+                    if (currentSelectionForIntrospection && e.ctrlKey && gameContext.introspectionManager) {
+                        gameContext.introspectionManager.createIntrospectionWindow(
+                            currentSelectionForIntrospection, 
+                            e.clientX + 20, 
+                            e.clientY + 20, 
+                            gameContext
+                        );
                     }
                 }
-
-                // Check buildings if no unit selected
-                if (!selectedObject) { // Only check buildings if no unit was selected
-                    for (const building of buildings) { // Use 'for...of' loop
-                        const dist = Math.sqrt((building.x - worldX) ** 2 + (building.y - worldY) ** 2);
-                        if (dist < (building.type.size || 50)) { // Assuming building.type.size or default
-                            selectedObject = building;
-                            break;
-                        }
-                    }
-                }
-
-                // Update selection manager
-                if (selectedObject) {
-                    selectionManager.setSelected(selectedObject);
-                } else {
-                    selectionManager.clearSelection();
-                }
-
-                // Create introspection window for selected object (Ctrl+Click)
-                const currentSelectionForIntrospection = selectionManager.getSelected(); // Re-get from manager
-                if (currentSelectionForIntrospection && e.ctrlKey && gameContext.introspectionManager) {
-                    gameContext.introspectionManager.createIntrospectionWindow(
-                        currentSelectionForIntrospection, 
-                        e.clientX + 20, 
-                        e.clientY + 20, 
-                        gameContext
-                    );
-                }
+            } else if (e.button === 2) { // Right click for commands (e.g., move)
+                const worldX = (e.clientX - camera.canvasWidth / 2) / camera.zoom + camera.x;
+                const worldY = (e.clientY - camera.canvasHeight / 2) / camera.zoom + camera.y;
+                inputManager.handleRightClick(worldX, worldY); // Pass false for shiftKey, or e.shiftKey if needed
+                e.preventDefault(); // Prevent context menu
             }
         });
 
@@ -132,15 +133,16 @@ export function initInputHandling(gameContext) {
                 gameContext.windowManager.handleMouseMove(e.clientX, e.clientY);
             }
 
-            if (mouseDown && !gameState.fpvMode) {
-                const dx = e.clientX - lastMouseX;
-                const dy = e.clientY - lastMouseY;
-                camera.x -= dx / camera.zoom;
-                camera.y -= dy / camera.zoom;
-                camera.autoCamera = false;
-                lastMouseX = e.clientX;
-                lastMouseY = e.clientY;
-            }
+            // Camera panning logic is now handled by the new camera controls in app.js
+            // if (mouseDown && !gameState.fpvMode) {
+            //     const dx = e.clientX - lastMouseX;
+            //     const dy = e.clientY - lastMouseY;
+            //     camera.x -= dx / camera.zoom;
+            //     camera.y -= dy / camera.zoom;
+            //     camera.autoCamera = false;
+            //     lastMouseX = e.clientX;
+            //     lastMouseY = e.clientY;
+            // }
         });
 
         canvas.addEventListener('mouseup', (e) => {
@@ -149,17 +151,18 @@ export function initInputHandling(gameContext) {
                 gameContext.windowManager.handleMouseUp(e.clientX, e.clientY, e.button);
             }
             
-            mouseDown = false;
+            mouseDown = false; // Still track mouseDown for selection logic, just not for panning here.
         });
 
         canvas.addEventListener('wheel', (e) => {
-            if (!gameState.fpvMode) {
-                const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-                camera.zoom *= zoomFactor;
-                camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom));
-            }
-            // e.preventDefault(); // Prevent page scrolling - removed for passive listener
-        }, { passive: true }); // Added passive: true
+            // Camera zooming logic is now handled by the new camera controls in app.js
+            // if (!gameState.fpvMode) {
+            //     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            //     camera.zoom *= zoomFactor;
+            //     camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom));
+            // }
+            // e.preventDefault(); // Prevent page scrolling - this is handled by new wheel listener in app.js if needed
+        }, { passive: true }); 
     } else {
         console.error("Canvas element not found in gameContext for input handling.");
     }
@@ -167,14 +170,26 @@ export function initInputHandling(gameContext) {
     // --- Document Event Listeners (Keyboard shortcuts) ---
     document.addEventListener('keydown', (e) => {
         // Get selected entity from selection manager for key events
-        const selectedEntity = selectionManager.getSelected();
+        const selectedEntity = selectionManager.getSelected(); // This might be stale if InputManager now owns selection state for commands.
+                                                          // For now, keep for FPV/grenade checks.
 
+        // Allow camera controls in app.js to handle WASD, Q, E, Shift, Ctrl, Alt without interference here.
+        const camControlKeys = ['w', 'a', 's', 'd', 'q', 'e', 'shift', 'control', 'alt'];
+        if (camControlKeys.includes(e.key.toLowerCase())) {
+            // If it's a camera control key, let app.js camera handlers deal with it primarily.
+            // We might still want Shift/Ctrl/Alt for command modifiers here, so don't return yet.
+        }
+        
+        // Game state related commands are now sent to InputManager
         switch (e.key.toLowerCase()) {
-            case ' ':
-                gameState.paused = !gameState.paused;
+            case ' ': 
+                inputManager.handleKeyPress(' '); 
+                break;
+            case 'p': 
+                inputManager.handleKeyPress('p');
                 break;
             case 'r':
-                initGame(gameContext); // initGame is from gameContext
+                if (gameContext.initGame) gameContext.initGame(gameContext); 
                 break;
             case 'f':
                 // Use selectedEntity from manager
@@ -191,15 +206,15 @@ export function initInputHandling(gameContext) {
             case 'g':
                 // Use selectedEntity from manager, ensure it's a commander unit
                 if (selectedEntity &&
-                    selectedEntity.type === UNIT_TYPES.commander && // Check if selected is Commander
-                    (selectedEntity.grenadeCooldown === undefined || selectedEntity.grenadeCooldown <= 0)) { // Check cooldown (assume 0 or undefined if ready)
-                    gameState.aimingGrenade = true;
-                    // TODO: Add visual feedback for aiming mode (e.g., cursor change)
+                    selectedEntity.type === UNIT_TYPES.commander && 
+                    (selectedEntity.grenadeCooldown === undefined || selectedEntity.grenadeCooldown <= 0)) { 
+                    gameState.aimingGrenade = true; 
                     console.log("Grenade aiming activated.");
                 } else if (gameState.aimingGrenade) {
-                    gameState.aimingGrenade = false; // Pressing G again cancels
+                    gameState.aimingGrenade = false; 
                     console.log("Grenade aiming cancelled by G.");
                 }
+                // Potentially: inputManager.handleKeyPress('g');
                 break;
             case 'tab':
                 e.preventDefault(); // Prevent default browser focus shifting and scrolling

@@ -1,3 +1,11 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This Closure Compiler build script is deprecated and scheduled for deletion.  #
+// #   The project has standardized on Webpack as the sole bundler.                                   #
+// #   Please use npm run build (for production) or npm run dev (for development).                    #
+// #                                                                                                  #
+// ####################################################################################################
+
 import pkg from 'google-closure-compiler';
 const { compiler: ClosureCompiler } = pkg;
 import fs from 'fs';
