@@ -8,9 +8,24 @@
 </head>
 <body>
     <h1>Bot Match Simulation</h1>
+    <div class="controls">
+        <label for="renderer-select">Choose Renderer:</label>
+        <select id="renderer-select">
+            <option value="svg">SVG Renderer</option>
+            <option value="canvas2d">Canvas 2D Renderer</option>
+            <option value="webgl2d" selected>WebGL 2D Renderer</option>
+            <option value="webgl3d">WebGL 3D Renderer</option>
+        </select>
+        <button id="start-simulation">Start Simulation</button>
+    </div>
     <div id="simulation-container">
         <canvas id="game-canvas" width="800" height="600"></canvas>
+        <svg id="game-svg" width="800" height="600" viewBox="0 0 800 600" style="display:none;"></svg>
     </div>
-    <script type="module" src="webgl_simulation.js"></script>
+    <div class="zoom-controls">
+        <button id="zoom-in">+</button>
+        <button id="zoom-out">-</button>
+    </div>
+    <script type="module" src="main_simulation.js"></script>
 </body>
 </html>

@@ -275,12 +275,12 @@ export class WebGLRenderer {
                 const posX = x * TILE_SIZE;
                 const posY = y * TILE_SIZE;
                 const size = TILE_SIZE;
-                const height = 0; // Flatten terrain for 2D visualization
+                const height = terrain[x][y] === TERRAIN_TYPES.MOUNTAIN ? 10 : (terrain[x][y] === TERRAIN_TYPES.WATER ? -5 : 0);
 
                 // Vertices for a quad (two triangles) with height variation for 3D effect
-                vertices.push(posX, posY, height);           // Top-left
-                vertices.push(posX + size, posY, height);     // Top-right
-                vertices.push(posX, posY + size, height);     // Bottom-left
+                vertices.push(posX, posY, height); // Top-left
+                vertices.push(posX + size, posY, height); // Top-right
+                vertices.push(posX, posY + size, height); // Bottom-left
                 vertices.push(posX + size, posY + size, height); // Bottom-right
 
                 // Indices for two triangles forming a quad
@@ -373,31 +373,6 @@ export class WebGLRenderer {
         let indexOffset = 0;
 
         // Render buildings with model-inspired scaling
-// Start of new 2D rendering for buildings (temporary)
-        gameContext.buildings.forEach(building => {
-            if (isVisible(building)) {
-                const size = building.type && building.type.size ? building.type.size : TILE_SIZE;
-                const halfSize = size / 2;
-                const z = 0; // Flat 2D
-
-                vertices.push(building.x - halfSize, building.y - halfSize, z);
-                vertices.push(building.x + halfSize, building.y - halfSize, z);
-                vertices.push(building.x - halfSize, building.y + halfSize, z);
-                vertices.push(building.x + halfSize, building.y + halfSize, z);
-
-                indices.push(indexOffset, indexOffset + 1, indexOffset + 2);
-                indices.push(indexOffset + 1, indexOffset + 3, indexOffset + 2);
-                indexOffset += 4;
-
-                const teamColor = building.team === 'blue' ? [0.3, 0.3, 1.0, 1.0] : [1.0, 0.3, 0.3, 1.0];
-                colors.push(...teamColor, ...teamColor, ...teamColor, ...teamColor);
-                texCoords.push(0, 0, 1, 0, 0, 1, 1, 1);
-                normals.push(0, 0, 1, 0, 0, 1, 0, 0, 1);
-            }
-        });
-        // End of new 2D rendering for buildings (temporary)
-
-        // Commenting out original 3D rendering for buildings (start)
         gameContext.buildings.forEach(building => {
             if (isVisible(building)) {
                 let modelKey = Object.keys(BUILDING_MODELS).find(key => BUILDING_MODELS[key].name === building.type.name);

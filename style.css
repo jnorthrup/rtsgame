@@ -17,7 +17,66 @@ h1 {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
-#game-canvas {
+#game-canvas, #game-svg {
+    background-color: #e0e0e0;
+}
+
+.controls {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.controls label {
+    font-weight: bold;
+}
+
+.controls select, .controls button {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1em;
+}
+
+.controls button {
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.controls button:hover {
+    background-color: #0056b3;
+}
+
+.terrain-cell.water {
+    fill: #003366; /* Darker blue for water */
+}
+
+.terrain-cell.land {
+    fill: #339933; /* Darker green for land */
+}
+
+.terrain-cell.mountain {
+    fill: #666666; /* Darker gray for mountain */
+}
+
+.zoom-controls {
+    margin-top: 10px;
+    display: flex;
+    gap: 5px;
+}
+
+.zoom-controls button {
+    padding: 5px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    cursor: pointer;
+}
+
+.zoom-controls button:hover {
     background-color: #e0e0e0;
 }
 
