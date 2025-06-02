@@ -67,7 +67,7 @@ const captions = [];
 const projectiles = []; // Added projectiles array
 
 // NEW: Global Configuration Flags for Headless Mode and Recording
-const HEADLESS_MODE = true; // Set to true to run without rendering/input for recording
+const HEADLESS_MODE = false; // Changed to false to enable rendering and input
 const RECORD_AI_DECISIONS = true; // Set to true to enable AI decision recording
 const RECORD_AI_DECISIONS_DURATION_SECONDS = 10; // Duration for AI decision recording in seconds
 
