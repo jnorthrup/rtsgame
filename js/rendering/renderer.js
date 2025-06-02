@@ -174,6 +174,11 @@ export function render(gameContext) {
         caption.draw(ctx, camera);
     }
 
+    // Draw windows on top of everything
+    if (gameContext.windowManager) {
+        gameContext.windowManager.draw(ctx);
+    }
+
     drawMinimap(gameContext);
 
     // Call the imported updateUI function directly

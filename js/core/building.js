@@ -1,11 +1,12 @@
 import { BUILDING_TYPES } from '../config/buildingTypes.js';
 import { UNIT_TYPES } from '../config/unitTypes.js';
-import { TILE_SIZE } from '../config/gameConstants.js'; // TILE_SIZE might be used for future drawing logic or helpers
+import { TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+import { findLandPosition } from './terrain.js';
 // Global variables like 'resources', 'units', 'captions', 'addEvent'
 // are accessed directly. This tight coupling will be addressed in later refactoring.
 
 class Building {
-    constructor(x, y, team, type) {
+    constructor(x, y, team, type, gameContext = null) {
         this.x = x;
         this.y = y;
         this.team = team;
@@ -14,11 +15,40 @@ class Building {
         this.maxHp = type.maxHp;
         this.productionQueue = [];
         this.productionProgress = 0;
-        this.rallyx = x + 100;
-        this.rallyy = y;
-        this.shields = 0; // Buildings typically don't have shields by default in this design
-        this.maxShields = 0; // Max shields
+        this.setRallyPoint(x, y, gameContext);
+        this.shields = 0;
+        this.maxShields = 0;
         this.captionCooldown = 0;
+    }
+
+    setRallyPoint(buildingX, buildingY, gameContext) {
+        // Try to find a valid land position for rally point
+        if (gameContext && gameContext.terrain) {
+            const rallyPositions = [
+                { x: buildingX + 100, y: buildingY },     // Right
+                { x: buildingX - 100, y: buildingY },     // Left  
+                { x: buildingX, y: buildingY + 100 },     // Down
+                { x: buildingX, y: buildingY - 100 },     // Up
+                { x: buildingX + 70, y: buildingY + 70 }, // Diagonal
+                { x: buildingX - 70, y: buildingY - 70 }  // Diagonal
+            ];
+
+            for (const pos of rallyPositions) {
+                const tileX = Math.floor(pos.x / TILE_SIZE);
+                const tileY = Math.floor(pos.y / TILE_SIZE);
+                
+                if (tileX >= 0 && tileX < GRID_SIZE && tileY >= 0 && tileY < GRID_SIZE &&
+                    gameContext.terrain[tileX] && gameContext.terrain[tileX][tileY] === TERRAIN_TYPES.LAND) {
+                    this.rallyx = pos.x;
+                    this.rallyy = pos.y;
+                    return;
+                }
+            }
+        }
+        
+        // Fallback to building position if no valid rally point found
+        this.rallyx = buildingX;
+        this.rallyy = buildingY;
     }
 
     update(units, mainGameGlobals) { // Pass main game globals like resources, captions if needed

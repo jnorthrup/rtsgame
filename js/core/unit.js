@@ -24,7 +24,16 @@ class Unit {
         this.shieldRegen = type.shieldRegen || 0;
         this.patrolTarget = null;
         this.lastTargetSwitch = 0;
-        this.aggressiveness = Math.random();
+        this.aggressiveness = 0.7 + Math.random() * 0.3;
+        this.tacticalRole = this.determineTacticalRole();
+        this.lastFireTime = 0;
+        this.preferredRange = this.type.range * 0.8;
+        this.militaryRank = this.determineMilitaryRank();
+        this.survivalPriority = this.calculateSurvivalPriority();
+        this.commandAuthority = this.type.tier * 10 + (this.type.support ? 5 : 0);
+        this.protectionNeeds = [];
+        this.lastThreatAssessment = 0;
+        this.fleeThreshold = this.maxHp * 0.2;
         this.formation = null;
         this.captionCooldown = 0;
         this.constructionTask = null; // Specific for ACU/Engineer type units
@@ -102,7 +111,10 @@ class Unit {
             this.defaultMovementAndTargeting(gameContext);
         }
 
-        this.updateStuckDetection(gameContext); // Called for all units after movement attempt
+        this.updateStuckDetection(gameContext);
+        this.updateTacticalBehavior(gameContext);
+        this.updateSurvivalBehaviors(gameContext);
+        this.executeCommandHierarchy(gameContext);
     }
 
     defaultMovementAndTargeting(gameContext) {
@@ -121,11 +133,11 @@ class Unit {
                 this.path = null; // Clear path after escaping, force re-path
             }
         } else {
-            // TARGET ACQUISITION (similar to before)
-            if (!this.target || this.target.hp <= 0 || (Date.now() - this.lastTargetSwitch > 5000 && Math.random() < 0.1)) {
-                this.findTarget(gameContext); // findTarget sets this.target
+            // TARGET ACQUISITION - More stable targeting
+            if (!this.target || this.target.hp <= 0 || (Date.now() - this.lastTargetSwitch > 15000 && Math.random() < 0.05)) {
+                this.findTarget(gameContext);
                 this.lastTargetSwitch = Date.now();
-                this.path = null; // New target, clear old path
+                this.path = null;
             }
             if (Math.random() < 0.005 && !this.target && !this.patrolTarget) { // Only look for patrol if no current combat target or existing patrol
                 // Simplified patrol target selection for brevity
@@ -209,25 +221,9 @@ class Unit {
                     } else { // Path just finished or became null
                         this.vx = 0; this.vy = 0;
                     }
-                } else if (this.target) { // NO PATH, but has a target (fallback to direct engagement or stop)
+                } else if (this.target) {
                     const distToTarget = this.getDistance(this.target);
-                    if (distToTarget > this.type.range) {
-                        // Fallback: direct move if very close, or path failed and target is not immediately reachable
-                        // This can replace the old direct movement logic.
-                        // If path failed, unit might just stop if target is far.
-                        // For simplicity, if path failed, we stop unless very close.
-                        if (distToTarget < TILE_SIZE * 2) { // If very close, try direct move
-                           this.angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                           const currentSpeed = this.getCurrentSpeed(gameContext);
-                           this.vx = Math.cos(this.angle) * currentSpeed;
-                           this.vy = Math.sin(this.angle) * currentSpeed;
-                        } else {
-                           this.vx = 0; this.vy = 0; // Stop if path failed and target is not very close
-                        }
-                    } else { // In range to attack
-                        this.vx = 0; this.vy = 0;
-                        if (this.cooldown <= 0) { this.attack(this.target, gameContext); this.cooldown = this.type.attackSpeed; }
-                    }
+                    this.handleCombatPositioning(distToTarget, gameContext);
                 } else if (this.patrolTarget) { // NO PATH, but has a patrol target (e.g. path failed)
                     // Similar to target: if very close, try direct move. Else stop.
                     const distToPatrol = Math.sqrt(Math.pow(this.patrolTarget.x - this.x, 2) + Math.pow(this.patrolTarget.y - this.y, 2));
@@ -332,10 +328,109 @@ class Unit {
 
         if (this.type === UNIT_TYPES.commander) {
             if (!this.constructionTask && this.type.buildList && this.type.buildList.length > 0) {
-                const buildingToBuildType = this.type.buildList[0];
+                let buildingToBuildType = null;
+                
+                // Count existing economic buildings
+                const teamExtractors = buildings.filter(b => 
+                    b.team === this.team && 
+                    (b.type.name === 'Mass Extractor' || b.type.name === 'Energy Plant')
+                ).length;
+                
+                const teamFactories = buildings.filter(b => 
+                    b.team === this.team && 
+                    b.type.produces && b.type.produces.length > 0
+                ).length;
+                
+                // PHASE 1: Critical Resource Start - Build mass extractor first (most important)
+                if (teamExtractors === 0) {
+                    for (const buildType of this.type.buildList) {
+                        if (buildType.name === 'Mass Extractor' &&
+                            resources[this.team].mass >= buildType.cost.mass &&
+                            resources[this.team].energy >= buildType.cost.energy) {
+                            buildingToBuildType = buildType;
+                            console.log(`${this.team} Commander building FIRST mass extractor for economy`);
+                            break;
+                        }
+                    }
+                }
+                
+                // PHASE 2: Energy Support - Build energy plant after first mass extractor
+                if (!buildingToBuildType && teamExtractors >= 1 && 
+                    buildings.filter(b => b.team === this.team && b.type.name === 'Energy Plant').length === 0) {
+                    for (const buildType of this.type.buildList) {
+                        if (buildType.name === 'Energy Plant' &&
+                            resources[this.team].mass >= buildType.cost.mass &&
+                            resources[this.team].energy >= buildType.cost.energy) {
+                            buildingToBuildType = buildType;
+                            console.log(`${this.team} Commander building energy plant for power`);
+                            break;
+                        }
+                    }
+                }
+                
+                // PHASE 3: Emergency Factory - Land factory ASAP for engineers and defense
+                if (!buildingToBuildType && teamExtractors >= 1 && teamFactories === 0 &&
+                    resources[this.team].mass >= 200 && resources[this.team].energy >= 100) {
+                    for (const buildType of this.type.buildList) {
+                        if (buildType.name === 'Land Factory' &&
+                            resources[this.team].mass >= buildType.cost.mass &&
+                            resources[this.team].energy >= buildType.cost.energy) {
+                            buildingToBuildType = buildType;
+                            console.log(`${this.team} Commander building PRIORITY Land Factory for engineers & defense`);
+                            break;
+                        }
+                    }
+                }
+                
+                // PHASE 4: Economic Expansion - More extractors for sustainability
+                if (!buildingToBuildType && teamFactories > 0 && teamExtractors < 4) {
+                    for (const buildType of this.type.buildList) {
+                        if (buildType.name === 'Mass Extractor' &&
+                            resources[this.team].mass >= buildType.cost.mass &&
+                            resources[this.team].energy >= buildType.cost.energy) {
+                            buildingToBuildType = buildType;
+                            console.log(`${this.team} Commander expanding economy with mass extractor`);
+                            break;
+                        }
+                    }
+                }
+                
+                // PHASE 5: Anti-Air Defense - Air factory for air superiority and AA units
+                if (!buildingToBuildType && teamFactories === 1 && teamExtractors >= 3 &&
+                    resources[this.team].mass >= 150 && resources[this.team].energy >= 120) {
+                    // Check if we're under air threat
+                    const enemyAirUnits = units.filter(u => 
+                        u.team !== this.team && u.type.domain === 'air' && 
+                        Math.sqrt((u.x - this.x) ** 2 + (u.y - this.y) ** 2) < 500
+                    ).length;
+                    
+                    if (enemyAirUnits > 0 || gameContext.gameState.gameTime > 120) { // Build air defense after 2 minutes
+                        for (const buildType of this.type.buildList) {
+                            if (buildType.name === 'Air Factory' &&
+                                resources[this.team].mass >= buildType.cost.mass &&
+                                resources[this.team].energy >= buildType.cost.energy) {
+                                buildingToBuildType = buildType;
+                                console.log(`${this.team} Commander building Air Factory for anti-air defense (threats: ${enemyAirUnits})`);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // PHASE 6: Late Game Economy - More extractors for advanced units
+                if (!buildingToBuildType && teamFactories >= 1 && teamExtractors < 6) {
+                    for (const buildType of this.type.buildList) {
+                        if ((buildType.name === 'Mass Extractor' || buildType.name === 'Energy Plant') &&
+                            resources[this.team].mass >= buildType.cost.mass &&
+                            resources[this.team].energy >= buildType.cost.energy) {
+                            buildingToBuildType = buildType;
+                            console.log(`${this.team} Commander expanding late-game economy`);
+                            break;
+                        }
+                    }
+                }
 
-                if (buildingToBuildType && resources[this.team].mass >= buildingToBuildType.cost.mass &&
-                    resources[this.team].energy >= buildingToBuildType.cost.energy) {
+                if (buildingToBuildType) {
                     const buildOffsets = [{ dx: 100, dy: 0 }, { dx: -100, dy: 0 }, { dx: 0, dy: 100 }, { dx: 0, dy: -100 }, { dx: 150, dy: 150 }, { dx: -150, dy: -150 }];
                     for (const offset of buildOffsets) {
                         const buildX = this.x + offset.dx;
@@ -385,7 +480,7 @@ class Unit {
                         this.captionCooldown = 30;
                     }
                     if (this.constructionTask.progress >= this.constructionTask.type.buildTime) {
-                        const newBuilding = new BuildingContructor(this.constructionTask.targetX, this.constructionTask.targetY, this.team, this.constructionTask.type);
+                        const newBuilding = new BuildingContructor(this.constructionTask.targetX, this.constructionTask.targetY, this.team, this.constructionTask.type, gameContext);
                         buildings.push(newBuilding);
                         addEvent(gameContext, 'build', `${this.team.toUpperCase()} ACU completed ${this.constructionTask.type.name}!`, 2, { x: newBuilding.x, y: newBuilding.y });
                         console.log(`${this.team} ACU completed ${this.constructionTask.type.name}`);
@@ -400,22 +495,33 @@ class Unit {
         } else if (this.type.name === 'Engineer') {
             let target = null;
             let minDist = Infinity;
-            for (const building of buildings) {
-                if (building.team === this.team && building.hp < building.maxHp) {
-                    const dist = this.getDistance(building);
-                    if (dist < minDist) { minDist = dist; target = building; }
+            
+            // FIRST PRIORITY: Find unoccupied resource nodes
+            for (const node of resourceNodes) {
+                if (!node.occupied && node.amount > 0) {
+                    const dist = Math.sqrt((node.x - this.x) ** 2 + (node.y - this.y) ** 2);
+                    if (dist < minDist) { minDist = dist; target = node; }
                 }
             }
+            
+            // SECOND PRIORITY: Repair damaged buildings only if no resource nodes available
             if (!target) {
-                for (const node of resourceNodes) {
-                    if (!node.occupied && node.amount > 0) {
-                        const dist = Math.sqrt((node.x - this.x) ** 2 + (node.y - this.y) ** 2);
-                        if (dist < minDist) { minDist = dist; target = node; }
+                for (const building of buildings) {
+                    if (building.team === this.team && building.hp < building.maxHp) {
+                        const dist = this.getDistance(building);
+                        if (dist < minDist) { minDist = dist; target = building; }
                     }
                 }
             }
 
             if (target) {
+                // Force movement toward resource nodes with high priority
+                if (target.amount !== undefined) { // It's a resource node
+                    this.target = null; // Clear combat target
+                    this.patrolTarget = { x: target.x, y: target.y }; // Use pathfinding
+                    this.aggressiveness = 0.2; // Stay defensive while building
+                }
+                
                 this.moveTowards(target, gameContext);
                 if (minDist < 100) { // Range to repair or build extractor
                     if (target.hp !== undefined) { // It's a building to repair
@@ -423,14 +529,20 @@ class Unit {
                     } else if (target.amount !== undefined && !target.occupied) { // It's a resource node
                         target.occupied = true;
                         buildings.push(new BuildingContructor(target.x, target.y, this.team,
-                            target.type === 'mass' ? BUILDING_TYPES.massExtractor : BUILDING_TYPES.energyExtractor));
-                        const event = addEvent(gameContext, 'resource', `${this.team.toUpperCase()} built ${target.type} extractor`, 2, { x: target.x, y: target.y });
+                            target.type === 'mass' ? BUILDING_TYPES.massExtractor : BUILDING_TYPES.energyExtractor, gameContext));
+                        addEvent(gameContext, 'resource', `${this.team.toUpperCase()} Engineer built ${target.type} extractor!`, 2, { x: target.x, y: target.y });
+                        console.log(`${this.team} Engineer completed ${target.type} extractor at (${target.x}, ${target.y})`);
                     }
                 }
                  return; // Engineer is busy
             } else {
-                // Follow friendly units or patrol if nothing to do
-                 this.defaultMovementAndTargeting(gameContext);
+                // If no resources available, patrol near commander for protection
+                const commander = units.find(u => u.team === this.team && u.type === UNIT_TYPES.commander);
+                if (commander && this.getDistance(commander) > 150) {
+                    this.patrolTarget = { x: commander.x, y: commander.y };
+                } else {
+                    this.defaultMovementAndTargeting(gameContext);
+                }
             }
         } else if (this.type.name === 'Shield Generator') {
             for (const unit of units) {
@@ -632,44 +744,110 @@ class Unit {
         }
     }
 
+    determineTacticalRole() {
+        if (this.type.range > 150) return 'sniper';
+        if (this.type.speed > 2.5) return 'scout';
+        if (this.type.damage > 40) return 'assault';
+        return 'infantry';
+    }
+
+    determineMilitaryRank() {
+        if (this.type.name === 'Commander') return 'GENERAL';
+        if (this.type.name === 'Experimental') return 'COLONEL';
+        if (this.type.tier >= 2.5) return 'MAJOR';
+        if (this.type.tier >= 2) return 'CAPTAIN';
+        if (this.type.support) return 'LIEUTENANT';
+        if (this.type.tier >= 1.5) return 'SERGEANT';
+        return 'PRIVATE';
+    }
+
+    calculateSurvivalPriority() {
+        let priority = 0;
+        if (this.type.name === 'Commander') priority += 1000;
+        if (this.type.support) priority += 200;
+        if (this.type.tier >= 3) priority += 150;
+        if (this.type.tier >= 2) priority += 100;
+        priority += this.type.maxHp / 10;
+        return priority;
+    }
+
     findTarget(gameContext) {
         const { units, buildings } = gameContext;
-        let closestDist = Infinity;
-        let newTarget = null; // Changed from 'closest' to 'newTarget' to avoid conflict with outer scope if any
+        let bestTarget = null;
+        let bestScore = -1;
+        const maxScanRange = this.type.range * 2;
 
-        // Find enemy units
-        for (const unit of units) {
-            if (unit.team !== this.team && unit.hp > 0 && !unit.type.support) { // Don't target support units primarily
-                const dist = this.getDistance(unit);
-                let adjustedDist = dist;
-                if (unit.type.tier >= 2) adjustedDist *= 0.7;
-                if (unit.type.name === UNIT_TYPES.commander.name) adjustedDist *= 0.5; // Prioritize enemy commander
+        // First priority: Protect high-value allies by targeting their threats
+        const threatenedAllies = units.filter(ally => 
+            ally.team === this.team && 
+            ally.survivalPriority > this.survivalPriority &&
+            this.getDistance(ally) < 250
+        );
 
-                if (adjustedDist < closestDist) {
-                    closestDist = adjustedDist;
-                    newTarget = unit;
+        for (const ally of threatenedAllies) {
+            for (const enemy of units) {
+                if (enemy.team !== this.team && enemy.hp > 0) {
+                    const allyThreatDist = ally.getDistance(enemy);
+                    const myDistToEnemy = this.getDistance(enemy);
+                    
+                    if (allyThreatDist < ally.type.range * 1.5 && myDistToEnemy < maxScanRange) {
+                        let protectionScore = 200; // Base protection score
+                        protectionScore += ally.survivalPriority / 10;
+                        protectionScore -= myDistToEnemy / 5;
+                        
+                        if (protectionScore > bestScore) {
+                            bestScore = protectionScore;
+                            bestTarget = enemy;
+                        }
+                    }
                 }
             }
         }
-        // Find enemy buildings
-        for (const building of buildings) {
-            if (building.team !== this.team && building.hp > 0) {
-                const dist = this.getDistance(building);
-                let priority = 1.0;
-                 // BUILDING_TYPES.commander does not exist; commanders are units.
-                 // TODO: Review logic for commander-specific building interaction if a special "command center" building type is added later.
-                if (building.type.resourceGeneration) priority = 0.8;
-                else if (building.type.produces) priority = 0.9;
 
-                const adjustedDist = dist * priority;
+        // Second priority: Standard target selection
+        if (!bestTarget) {
+            for (const unit of units) {
+                if (unit.team !== this.team && unit.hp > 0) {
+                    const dist = this.getDistance(unit);
+                    if (dist > maxScanRange) continue;
 
-                if (adjustedDist < closestDist) {
-                    closestDist = adjustedDist;
-                    newTarget = building;
+                    let score = 100 - (dist / 10);
+                    
+                    // Prioritize by survival value and threat level
+                    score += unit.survivalPriority / 20;
+                    if (this.tacticalRole === 'sniper' && unit.type.support) score += 50;
+                    if (this.tacticalRole === 'assault' && unit.type.name === UNIT_TYPES.commander.name) score += 100;
+                    if (unit.type.tier >= 2) score += 30;
+                    if (unit.hp < unit.maxHp * 0.3) score += 20;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestTarget = unit;
+                    }
                 }
             }
         }
-        this.target = newTarget;
+
+        // Third priority: Buildings
+        if (!bestTarget || bestScore < 50) {
+            for (const building of buildings) {
+                if (building.team !== this.team && building.hp > 0) {
+                    const dist = this.getDistance(building);
+                    if (dist > maxScanRange) continue;
+
+                    let score = 60 - (dist / 15);
+                    if (building.type.resourceGeneration) score += 40;
+                    if (building.type.produces) score += 30;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestTarget = building;
+                    }
+                }
+            }
+        }
+        
+        this.target = bestTarget;
     }
 
     getDistance(other) {
@@ -800,13 +978,401 @@ class Unit {
         ctx.restore();
     }
 
+    handleCombatPositioning(distToTarget, gameContext) {
+        const inRange = distToTarget <= this.type.range;
+        const tooClose = distToTarget < this.preferredRange * 0.5;
+        
+        if (tooClose && this.tacticalRole === 'sniper') {
+            // Snipers back away to maintain distance
+            this.angle = Math.atan2(this.y - this.target.y, this.x - this.target.x);
+            const currentSpeed = this.getCurrentSpeed(gameContext);
+            this.vx = Math.cos(this.angle) * currentSpeed * 0.5;
+            this.vy = Math.sin(this.angle) * currentSpeed * 0.5;
+        } else if (!inRange) {
+            // Move closer if out of range
+            this.angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+            const currentSpeed = this.getCurrentSpeed(gameContext);
+            this.vx = Math.cos(this.angle) * currentSpeed;
+            this.vy = Math.sin(this.angle) * currentSpeed;
+        } else {
+            // In optimal range - stop and shoot
+            this.vx = 0;
+            this.vy = 0;
+            if (this.cooldown <= 0) {
+                this.attack(this.target, gameContext);
+                this.cooldown = this.type.attackSpeed;
+                this.lastFireTime = Date.now();
+            }
+        }
+    }
+
+    updateTacticalBehavior(gameContext) {
+        const now = Date.now();
+        
+        // Agglomeration: Units naturally group together for mutual support
+        this.executeAgglomeration(gameContext);
+        
+        // Movement: Coordinated movement based on group dynamics
+        this.executeGroupMovement(gameContext);
+        
+        // Interaction: Units benefit each other based on hierarchy
+        this.executeUnitInteractions(gameContext);
+        
+        // Repositioning: Dynamic tactical positioning
+        this.executeRepositioning(gameContext);
+    }
+    
+    executeAgglomeration(gameContext) {
+        const { units } = gameContext;
+        const agglomerationRange = 400; // Increased range
+        const nearbyAllies = units.filter(u => 
+            u.team === this.team && 
+            u !== this && 
+            this.getDistance(u) < agglomerationRange
+        );
+        
+        if (nearbyAllies.length >= 2) { // Only group when 3+ units
+            // Calculate center of mass for friendly units
+            let centerX = this.x;
+            let centerY = this.y;
+            let totalWeight = this.survivalPriority;
+            
+            for (const ally of nearbyAllies) {
+                const weight = ally.survivalPriority;
+                centerX += ally.x * weight;
+                centerY += ally.y * weight;
+                totalWeight += weight;
+            }
+            
+            centerX /= totalWeight;
+            centerY /= totalWeight;
+            
+            const distToCenter = Math.sqrt((centerX - this.x) ** 2 + (centerY - this.y) ** 2);
+            
+            // Strong pull toward center when not in immediate combat
+            if (!this.target && !this.isEscaping && distToCenter > 100) {
+                const driftStrength = 0.8; // Much stronger pull
+                this.angle = Math.atan2(centerY - this.y, centerX - this.x);
+                const currentSpeed = this.getCurrentSpeed(gameContext);
+                this.vx = Math.cos(this.angle) * currentSpeed * driftStrength;
+                this.vy = Math.sin(this.angle) * currentSpeed * driftStrength;
+                
+                // Add patrol target to center for pathfinding
+                this.patrolTarget = { x: centerX, y: centerY };
+            }
+        }
+    }
+    
+    executeGroupMovement(gameContext) {
+        const { units } = gameContext;
+        const movementRange = 500; // Increased range
+        
+        // Find group leader (highest command authority nearby)
+        let groupLeader = null;
+        let highestAuthority = this.commandAuthority;
+        
+        for (const ally of units) {
+            if (ally.team === this.team && 
+                ally.commandAuthority > highestAuthority &&
+                this.getDistance(ally) < movementRange) {
+                highestAuthority = ally.commandAuthority;
+                groupLeader = ally;
+            }
+        }
+        
+        if (groupLeader && groupLeader !== this) {
+            const leaderDist = this.getDistance(groupLeader);
+            const idealDistance = 80 + (this.militaryRank === 'PRIVATE' ? 40 : 0);
+            
+            // More aggressive following behavior
+            if (leaderDist > idealDistance + 20) {
+                // Strong movement toward leader using pathfinding
+                this.patrolTarget = { x: groupLeader.x, y: groupLeader.y };
+                this.target = null; // Clear combat target to focus on formation
+                
+                // Direct movement for immediate response
+                this.angle = Math.atan2(groupLeader.y - this.y, groupLeader.x - this.x);
+                const currentSpeed = this.getCurrentSpeed(gameContext);
+                this.vx = Math.cos(this.angle) * currentSpeed * 0.9;
+                this.vy = Math.sin(this.angle) * currentSpeed * 0.9;
+            }
+            
+            // Formation spacing - spread around leader in tactical positions
+            if (leaderDist < 60 && leaderDist > 20) {
+                const spreadAngle = this.angle + (Math.random() - 0.5) * Math.PI / 2;
+                const spreadDist = 15;
+                this.x += Math.cos(spreadAngle) * spreadDist;
+                this.y += Math.sin(spreadAngle) * spreadDist;
+            }
+        }
+    }
+    
+    executeUnitInteractions(gameContext) {
+        const { units } = gameContext;
+        const interactionRange = 120;
+        
+        for (const ally of units) {
+            if (ally.team === this.team && ally !== this && this.getDistance(ally) < interactionRange) {
+                // Higher rank units benefit lower rank units
+                if (this.commandAuthority > ally.commandAuthority) {
+                    this.provideBenefit(ally);
+                } else if (ally.commandAuthority > this.commandAuthority) {
+                    this.receiveBenefit(ally);
+                }
+            }
+        }
+    }
+    
+    provideBenefit(subordinate) {
+        // Higher ranking units provide benefits to lower ranking ones
+        if (this.militaryRank === 'GENERAL' || this.militaryRank === 'COLONEL') {
+            // Command bonus: improved accuracy and morale
+            subordinate.aggressiveness = Math.min(1.0, subordinate.aggressiveness + 0.01);
+            
+            // Coordination bonus: share target information
+            if (this.target && !subordinate.target) {
+                subordinate.target = this.target;
+            }
+        }
+        
+        if (this.type.support) {
+            // Support units provide direct benefits
+            if (this.type.name === 'Shield Generator') {
+                subordinate.shields = Math.min(subordinate.maxShields, 
+                    subordinate.shields + (this.type.shieldBoost || 2));
+            }
+        }
+    }
+    
+    receiveBenefit(superior) {
+        // Lower ranking units receive benefits from higher ranking ones
+        if (superior.militaryRank === 'GENERAL' && this.militaryRank === 'PRIVATE') {
+            // Command structure bonus
+            this.preferredRange = Math.min(this.type.range, this.preferredRange + 1);
+        }
+        
+        // Protection seeking behavior
+        if (this.hp < this.maxHp * 0.6 && superior.hp > superior.maxHp * 0.8) {
+            const distToSuperior = this.getDistance(superior);
+            if (distToSuperior > 80) {
+                // Move closer to healthy superior for protection
+                this.patrolTarget = { x: superior.x, y: superior.y };
+            }
+        }
+    }
+    
+    executeRepositioning(gameContext) {
+        const { units } = gameContext;
+        
+        // Tactical repositioning based on battlefield conditions
+        if (this.target) {
+            const enemiesNearby = units.filter(enemy => 
+                enemy.team !== this.team && 
+                enemy.hp > 0 && 
+                this.getDistance(enemy) < this.type.range * 1.5
+            );
+            
+            const alliesNearby = units.filter(ally => 
+                ally.team === this.team && 
+                ally !== this && 
+                this.getDistance(ally) < 150
+            );
+            
+            // If outnumbered, reposition to be closer to allies
+            if (enemiesNearby.length > alliesNearby.length + 1 && alliesNearby.length > 0) {
+                const nearestAlly = alliesNearby.reduce((closest, ally) => 
+                    this.getDistance(ally) < this.getDistance(closest) ? ally : closest
+                );
+                
+                // Gradual repositioning toward ally
+                const angle = Math.atan2(nearestAlly.y - this.y, nearestAlly.x - this.x);
+                this.x += Math.cos(angle) * 0.3;
+                this.y += Math.sin(angle) * 0.3;
+            }
+            
+            // If in advantageous position, hold ground
+            if (alliesNearby.length > enemiesNearby.length && this.hp > this.maxHp * 0.7) {
+                this.aggressiveness = Math.min(1.0, this.aggressiveness + 0.005);
+            }
+        }
+    }
+
+    updateSurvivalBehaviors(gameContext) {
+        const now = Date.now();
+        
+        // Periodic threat assessment
+        if (now - this.lastThreatAssessment > 2000) {
+            this.assessThreats(gameContext);
+            this.lastThreatAssessment = now;
+        }
+        
+        // Self-preservation: flee when critically damaged
+        if (this.hp < this.fleeThreshold && !this.isEscaping) {
+            this.executeTacticalRetreat(gameContext);
+        }
+        
+        // Shield management for support units
+        if (this.type.support && this.shields < this.maxShields * 0.5) {
+            this.seekProtection(gameContext);
+        }
+    }
+    
+    assessThreats(gameContext) {
+        const { units } = gameContext;
+        const threatRange = this.type.range * 1.5;
+        this.protectionNeeds = [];
+        
+        let immediateThreats = 0;
+        for (const enemy of units) {
+            if (enemy.team !== this.team && enemy.hp > 0) {
+                const dist = this.getDistance(enemy);
+                if (dist < threatRange) {
+                    immediateThreats++;
+                    // Higher tier units represent greater threats
+                    if (enemy.type.tier > this.type.tier) {
+                        this.protectionNeeds.push('HEAVY_SUPPORT');
+                    }
+                    if (enemy.type.damage > this.type.maxHp * 0.3) {
+                        this.protectionNeeds.push('IMMEDIATE_RETREAT');
+                    }
+                }
+            }
+        }
+        
+        if (immediateThreats > 2 && this.militaryRank !== 'GENERAL') {
+            this.protectionNeeds.push('REINFORCEMENTS');
+        }
+    }
+    
+    executeTacticalRetreat(gameContext) {
+        const { units } = gameContext;
+        
+        // Find friendly units to retreat toward
+        let bestRetreatPoint = null;
+        let maxSafety = -1;
+        
+        for (const ally of units) {
+            if (ally.team === this.team && ally !== this && ally.hp > ally.maxHp * 0.7) {
+                const dist = this.getDistance(ally);
+                if (dist < 300) {
+                    const safety = ally.survivalPriority + ally.hp;
+                    if (safety > maxSafety) {
+                        maxSafety = safety;
+                        bestRetreatPoint = { x: ally.x, y: ally.y };
+                    }
+                }
+            }
+        }
+        
+        if (bestRetreatPoint) {
+            this.target = null; // Stop fighting
+            this.patrolTarget = bestRetreatPoint;
+            this.aggressiveness = 0.1; // Become defensive
+        }
+    }
+    
+    seekProtection(gameContext) {
+        const { units } = gameContext;
+        
+        // Find higher-ranking units to stay near
+        let protector = null;
+        let minDist = Infinity;
+        
+        for (const ally of units) {
+            if (ally.team === this.team && ally.commandAuthority > this.commandAuthority) {
+                const dist = this.getDistance(ally);
+                if (dist < minDist && dist > 50) { // Not too close, not too far
+                    minDist = dist;
+                    protector = ally;
+                }
+            }
+        }
+        
+        if (protector && minDist > 120) {
+            this.patrolTarget = { x: protector.x, y: protector.y };
+        }
+    }
+    
+    executeCommandHierarchy(gameContext) {
+        const { units } = gameContext;
+        
+        // High-ranking units can issue orders to lower ranks
+        if (this.militaryRank === 'GENERAL' || this.militaryRank === 'COLONEL') {
+            this.issueStrategicOrders(gameContext);
+        }
+        
+        // Lower ranking units follow orders from higher ranks
+        if (this.commandAuthority < 50) {
+            this.followSuperiorOrders(gameContext);
+        }
+    }
+    
+    issueStrategicOrders(gameContext) {
+        const { units } = gameContext;
+        const subordinates = units.filter(u => 
+            u.team === this.team && 
+            u.commandAuthority < this.commandAuthority &&
+            this.getDistance(u) < 400
+        );
+        
+        // Order retreats for critically damaged units
+        for (const sub of subordinates) {
+            if (sub.hp < sub.maxHp * 0.3 && !sub.isEscaping) {
+                sub.protectionNeeds.push('COMMANDER_RETREAT_ORDER');
+                sub.executeTacticalRetreat(gameContext);
+            }
+        }
+        
+        // Coordinate group attacks
+        if (subordinates.length >= 3 && this.target) {
+            const attackGroup = subordinates.slice(0, 3);
+            for (const attacker of attackGroup) {
+                if (!attacker.target || this.getDistance(attacker.target) > 200) {
+                    attacker.target = this.target;
+                    attacker.lastTargetSwitch = Date.now();
+                }
+            }
+        }
+    }
+    
+    followSuperiorOrders(gameContext) {
+        const { units } = gameContext;
+        
+        // Find commanding officer
+        let commander = null;
+        let highestAuthority = 0;
+        
+        for (const ally of units) {
+            if (ally.team === this.team && 
+                ally.commandAuthority > this.commandAuthority &&
+                ally.commandAuthority > highestAuthority &&
+                this.getDistance(ally) < 300) {
+                highestAuthority = ally.commandAuthority;
+                commander = ally;
+            }
+        }
+        
+        if (commander) {
+            // Follow commander's target priorities
+            if (commander.target && !this.target && this.getDistance(commander.target) < this.type.range * 2) {
+                this.target = commander.target;
+            }
+            
+            // Maintain formation distance based on rank
+            const formationDistance = this.militaryRank === 'PRIVATE' ? 80 : 120;
+            const distToCommander = this.getDistance(commander);
+            
+            if (distToCommander > formationDistance + 50 && !this.target) {
+                this.patrolTarget = { x: commander.x, y: commander.y };
+            }
+        }
+    }
+
     updateStuckDetection(gameContext) {
-        // Calculate distance moved this frame
         const dxMoved = this.x - this.lastPositionForStuckCheck.x;
         const dyMoved = this.y - this.lastPositionForStuckCheck.y;
         const distanceMoved = Math.sqrt(dxMoved * dxMoved + dyMoved * dyMoved);
 
-        // Check if unit was trying to move
         const wasTryingToMove = (this.target || this.patrolTarget || this.isEscaping || this.vx !== 0 || this.vy !== 0);
 
         if (wasTryingToMove && distanceMoved < this.significantMoveThreshold) {
@@ -820,13 +1386,7 @@ class Unit {
         if (this.stuckFrames > this.STUCK_FRAMES_THRESHOLD && !this.isEscaping) {
             this.isEscaping = true;
             this.escapeDuration = this.ESCAPE_MODE_DURATION_FRAMES;
-            // Determine escape angle:
             this.escapeAngle = this.angle + (Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
-            this.escapeAngle += (Math.random() - 0.5) * (Math.PI / 4); // Add up to +/- 22.5 degrees
-
-            if (gameContext.addEvent) {
-                 gameContext.addEvent(gameContext, 'debug', `${this.type.name} stuck, trying escape. Angle: ${this.escapeAngle.toFixed(2)}`, 0, { x: this.x, y: this.y });
-            }
         }
     }
 }
