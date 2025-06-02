@@ -1,3 +1,12 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This script is deprecated and scheduled for deletion.                         #
+// #   Its functionality for running a short, basic headless match is better covered by:              #
+// #     - `headless-node.js` (for tests using the main simulation engine)                            #
+// #     - `scenario-tester.js` (for specific simple scenarios with the main simulation engine)       #
+// #                                                                                                  #
+// ####################################################################################################
+
 #!/usr/bin/env node
 
 console.log('Running a simple 10-second bot match simulation with terrain...');

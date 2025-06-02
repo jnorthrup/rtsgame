@@ -1,3 +1,11 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This entire file is deprecated and scheduled for deletion.                    #
+// #   Static file serving for the application is now handled by the Express server at the            #
+// #   project root (server.js). That server is more robust and serves all necessary assets.          #
+// #                                                                                                  #
+// ####################################################################################################
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

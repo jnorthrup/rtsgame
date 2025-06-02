@@ -1,3 +1,11 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This BorderLayout system is deprecated and scheduled for deletion.            #
+// #   The project is transitioning to React for its UI framework (see js/ui/components/UiRoot.jsx).  #
+// #   Future UI development should use React components for layout and UI elements.                  #
+// #                                                                                                  #
+// ####################################################################################################
+
 // js/ui/borderLayout.js
 // Recursive Border Layout System inspired by AWT BorderLayout
 

@@ -1,4 +1,12 @@
 // js/core/game.js
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This entire file is deprecated and scheduled for deletion.                    #
+// #   Core simulation logic has been moved to js_rewritten/core/simulation.js.                       #
+// #   UI, rendering, and main loop control should be handled by their respective modules.            #
+// #                                                                                                  #
+// ####################################################################################################
+
 import { UNIT_TYPES } from '../config/unitTypes.js';
 import { BUILDING_TYPES } from '../config/buildingTypes.js';
 import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES, MIN_LAND_PERCENTAGE, MAX_TERRAIN_RETRIES } from '../config/gameConstants.js';

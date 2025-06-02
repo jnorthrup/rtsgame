@@ -2,11 +2,13 @@ import { BUILDING_TYPES } from '../config/buildingTypes.js';
 import { UNIT_TYPES } from '../config/unitTypes.js';
 import { TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
 import { findLandPosition } from './terrain.js';
+import { Unit } from './unit.js'; // Added import
+import { Caption } from './caption.js'; // Added import
 // Global variables like 'resources', 'units', 'captions', 'addEvent'
 // are accessed directly. This tight coupling will be addressed in later refactoring.
 
 class Building {
-    constructor(x, y, team, type, gameContext = null) {
+    constructor(x, y, team, type, simulation = null) { // Renamed gameContext to simulation
         this.x = x;
         this.y = y;
         this.team = team;
@@ -15,15 +17,17 @@ class Building {
         this.maxHp = type.maxHp;
         this.productionQueue = [];
         this.productionProgress = 0;
-        this.setRallyPoint(x, y, gameContext);
+        this.setRallyPoint(x, y, simulation);
         this.shields = 0;
         this.maxShields = 0;
         this.captionCooldown = 0;
     }
 
-    setRallyPoint(buildingX, buildingY, gameContext) {
+    setRallyPoint(buildingX, buildingY, simulation) { // Renamed parameter for clarity
         // Try to find a valid land position for rally point
-        if (gameContext && gameContext.terrain) {
+        // Access terrain directly from the simulation instance
+        const terrain = simulation ? simulation.terrain : null; 
+        if (terrain) {
             const rallyPositions = [
                 { x: buildingX + 100, y: buildingY },     // Right
                 { x: buildingX - 100, y: buildingY },     // Left  
@@ -38,7 +42,7 @@ class Building {
                 const tileY = Math.floor(pos.y / TILE_SIZE);
                 
                 if (tileX >= 0 && tileX < GRID_SIZE && tileY >= 0 && tileY < GRID_SIZE &&
-                    gameContext.terrain[tileX] && gameContext.terrain[tileX][tileY] === TERRAIN_TYPES.LAND) {
+                    terrain[tileX] && terrain[tileX][tileY] === TERRAIN_TYPES.LAND) {
                     this.rallyx = pos.x;
                     this.rallyy = pos.y;
                     return;
@@ -51,31 +55,29 @@ class Building {
         this.rallyy = buildingY;
     }
 
-    // Refactored to accept gameContext directly
-    update(gameContext) { 
-        const { units, resources, captions, addEvent, Unit, Caption } = gameContext; // Destructure directly from gameContext
+    update(simulation, deltaTime) { 
+        const { entityManager, gameState, seedRandom } = simulation; // Destructure main components from simulation
+        const { resources, addEvent } = gameState;
+        const { addUnit, addCaption } = entityManager;
 
         // Resource generation
         if (this.type.resourceGeneration) {
-            // Accessing resources from gameContext
             resources[this.team][this.type.resourceGeneration.type] += this.type.resourceGeneration.amount;
             resources[this.team][this.type.resourceGeneration.type + 'Income'] =
-                this.type.resourceGeneration.amount * 60; // Per minute display
+                this.type.resourceGeneration.amount * 60; 
         }
 
         // Auto-production with resource check
         if (this.type.produces && this.productionQueue.length === 0) {
             const unitTypesToBuild = this.type.produces.filter(unitType => {
-                // Accessing resources from gameContext
                 return resources[this.team].mass >= (unitType.cost?.mass || 0) &&
                        resources[this.team].energy >= (unitType.cost?.energy || 0);
             });
 
-            if (unitTypesToBuild.length > 0 && gameContext.seedRandom.random() < 0.02) { // Use seeded random
-                const unitType = unitTypesToBuild[Math.floor(gameContext.seedRandom.random() * unitTypesToBuild.length)]; // Use seeded random
+            if (unitTypesToBuild.length > 0 && seedRandom && seedRandom.random() < 0.02) { 
+                const unitType = unitTypesToBuild[Math.floor(seedRandom.random() * unitTypesToBuild.length)]; 
                 this.productionQueue.push(unitType);
 
-                // Deduct resources
                 if (unitType.cost) {
                     resources[this.team].mass -= unitType.cost.mass || 0;
                     resources[this.team].energy -= unitType.cost.energy || 0;
@@ -85,39 +87,40 @@ class Building {
 
         // Production progress
         if (this.productionQueue.length > 0) {
-            this.productionProgress++;
+            // Assuming buildTime is in seconds, deltaTime is in seconds.
+            // Production progress should accumulate towards buildTime.
+            this.productionProgress += deltaTime; 
 
-            // Production caption
-            if (this.captionCooldown <= 0 && gameContext.seedRandom.random() < 0.01) { // Use seeded random
-                const progress = Math.floor((this.productionProgress / this.productionQueue[0].buildTime) * 100);
-                // Accessing captions and Caption class from gameContext
-                captions.push(new Caption(this.x, this.y - this.type.size,
-                    `Building ${this.productionQueue[0].name} ${progress}%`, '#ff0', 10));
-                this.captionCooldown = 90;
+            if (this.captionCooldown <= 0 && seedRandom && seedRandom.random() < 0.01) { 
+                const progressPercent = Math.floor((this.productionProgress / this.productionQueue[0].buildTime) * 100);
+                addCaption(new Caption(this.x, this.y - this.type.size,
+                    `Building ${this.productionQueue[0].name} ${progressPercent}%`, '#ff0', 10));
+                this.captionCooldown = 1.5; // Cooldown in seconds
             }
 
             if (this.productionProgress >= this.productionQueue[0].buildTime) {
                 const unitType = this.productionQueue.shift();
-                // Accessing units and Unit class from gameContext
-                const newUnit = new Unit(this.rallyx, this.rallyy, this.team, unitType, gameContext); // Pass gameContext to Unit constructor
-                units.push(newUnit);
+                const newUnit = new Unit(this.rallyx, this.rallyy, this.team, unitType, simulation); 
+                addUnit(newUnit);
                 this.productionProgress = 0;
 
-                // Completion caption
-                captions.push(new Caption(this.x, this.y - this.type.size,
-                    `${unitType.name} ready!`, '#0f0', 12));
+                addCaption(new Caption(this.x, this.y - this.type.size,
+                   `${unitType.name} ready!`, '#0f0', 12));
 
                 if (unitType.name === 'Experimental' || unitType.tier === 3) {
-                    // Accessing addEvent from gameContext
-                    const event = addEvent(gameContext, 'build', // Pass gameContext as first arg
+                    const event = addEvent('build', 
                         `${this.team.toUpperCase()} completed ${unitType.name}!`, 3);
                     event.position = { x: this.x, y: this.y };
                 }
             }
         }
 
-        if (this.captionCooldown > 0) this.captionCooldown--;
+        if (this.captionCooldown > 0) {
+            this.captionCooldown -= deltaTime;
+        }
     }
+
+    // Removed duplicated cooldown line from here
 
     draw(ctx, camera) {
         // TILE_SIZE is now imported and available if needed for calculations.

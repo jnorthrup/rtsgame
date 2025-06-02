@@ -1,8 +1,16 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This entire file is deprecated and scheduled for deletion.                    #
+// #   Its functionality (updating DOM elements) is being called from the main game loop (js/main.js) #
+// #   for now, but it's intended to be replaced by a new UI system/library integration later.        #
+// #                                                                                                  #
+// ####################################################################################################
+
 import { UNIT_TYPES } from '../config/unitTypes.js';
 // formatTime is imported from game.js, which requires gameContext.
 // However, updateUI itself will receive gameContext.
 // formatTime itself doesn't need gameContext, only the value to format.
-import { formatTime } from '../core/game.js';
+import { formatTime } from '../js_rewritten/core/simulation.js'; // Updated import path
 
 export function updateUI(gameContext) {
     const { units, buildings, resources, gameState, camera, UNIT_TYPES: gameContextUnitTypes } = gameContext;
@@ -35,7 +43,8 @@ export function updateUI(gameContext) {
     if (redCommanderEl) redCommanderEl.textContent = redCommander ?
         Math.round(redCommander.hp / redCommander.maxHp * 100) + '%' : 'DESTROYED';
 
-    // Resources
+    // Resources - DOM updates for these are now handled by ResourceDisplay.jsx React component
+    /*
     const blueMassEl = document.getElementById('blueMass');
     if (blueMassEl) blueMassEl.textContent = Math.floor(resources.blue.mass);
 
@@ -47,6 +56,7 @@ export function updateUI(gameContext) {
 
     const redEnergyEl = document.getElementById('redEnergy');
     if (redEnergyEl) redEnergyEl.textContent = Math.floor(resources.red.energy);
+    */
 
     // Game time
     const gameTimeEl = document.getElementById('gameTime');

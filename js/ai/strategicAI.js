@@ -6,9 +6,7 @@ import { UNIT_TYPES } from '../config/unitTypes.js';
 import { findLandPosition } from '../core/terrain.js';
 import { Building } from '../core/building.js';
 import { Caption } from '../core/caption.js';
-import { battleJournal } from '../core/battleJournal.js'; // This import needs to be updated to take battleJournal from gameContext.
-                                                       // However, battleJournal is now passed via gameContext, so direct import isn't needed.
-                                                       // Leaving as-is for now, assuming recordAIDecision correctly gets it from gameContext.
+// Removed incorrect import of battleJournal. It will be accessed via gameContext (simulation instance).
 
 // AI personality profiles for varied gameplay
 const AI_PERSONALITIES = {
@@ -713,12 +711,14 @@ function calculateFormationPositions(centerX, centerY, unitCount, formation) {
 }
 
 // Updated to receive gameContext
-function recordAIDecision(gameContext, team, decisionType, data) {
-    if (gameContext.battleJournal && gameContext.battleJournal.isRecording) { // Check if battleJournal exists and is recording
-        gameContext.battleJournal.recordEvent(decisionType, // type
-            `AI decision for ${team}: ${decisionType}`, // message
-            gameContext.gameState.gameTime, // gameTime
-            { // details
+function recordAIDecision(gameContext, team, decisionType, data) { // gameContext is the simulation instance
+    // Access battleJournal from the simulation instance
+    if (gameContext.battleJournal && gameContext.battleJournal.isRecording) { 
+        // New API: recordEvent(type, message, data = null)
+        // gameTime is handled implicitly by the new battleJournal.
+        gameContext.battleJournal.recordEvent(decisionType, 
+            `AI decision for ${team}: ${decisionType}`, 
+            { // data payload
                 ...data,
                 aiTeam: team
             }

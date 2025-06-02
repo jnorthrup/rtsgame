@@ -7,6 +7,7 @@
  * integrating 3D models inspired by large-scale mechanized warfare themes.
  */
 
+import { mat4, vec3 } from 'gl-matrix'; // Import gl-matrix
 import { TERRAIN_TYPES, TILE_SIZE, GRID_SIZE, WORLD_SIZE } from '../../js/config/gameConstants.js';
 import { BUILDING_TYPES } from '../../js/config/buildingTypes.js';
 import { UNIT_TYPES } from '../../js/config/unitTypes.js';
@@ -409,183 +410,72 @@ export class WebGLRenderer {
     }
 
     setupMatrices() {
-        // Perspective projection
-        const fieldOfView = 45 * Math.PI / 180; // in radians
+        const projectionMatrix = mat4.create();
+        const fieldOfViewY = 45 * Math.PI / 180; // in radians
         const aspect = this.canvas.width / this.canvas.height;
         const zNear = 0.1;
-        const zFar = WORLD_SIZE * TILE_SIZE * 2; // Far plane beyond world size
+        const zFar = WORLD_SIZE * TILE_SIZE * 2; // Adapted from old code
+        mat4.perspective(projectionMatrix, fieldOfViewY, aspect, zNear, zFar);
 
-        // Calculate projection matrix
-        const f = 1.0 / Math.tan(fieldOfView / 2);
-        const projectionMatrix = [
-            f / aspect, 0, 0, 0,
-            0, f, 0, 0,
-            0, 0, (zFar + zNear) / (zNear - zFar), -1,
-            0, 0, (2 * zFar * zNear) / (zNear - zFar), 0,
-        ];
+        const viewMatrix = mat4.create();
+        const cam = this.camera;
 
-        // View matrix (transforms world coordinates to camera coordinates)
-        // Start with identity matrix
-        let viewMatrix = [
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1
-        ];
+        // Eye position: Start at the camera's X,Y focus point on the ground (Z=0 for ground),
+        // then move "backwards" (positive Z in view space initially) by a distance controlled by zoom,
+        // then apply pitch (angle around X-axis) and yaw (rotation around Y-axis).
 
-        // Apply inverse translation (move the world opposite to camera's position)
-        // Adjust Z for camera distance from origin (e.g., -500 for a distance)
-        const translationMatrix = [
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            -this.camera.x, -this.camera.y, -500 / this.camera.zoom, 1 // Z distance adjusted by zoom
-        ];
-        viewMatrix = this.multiplyMatrices(viewMatrix, translationMatrix);
+        const eye = vec3.fromValues(cam.x, cam.y, 0); // Initial focus point on the ground
+        const center = vec3.fromValues(cam.x, cam.y, 0); // Look at the same point on the ground
+        const up = vec3.fromValues(0, 1, 0); // World Y is up
 
-        // Apply inverse rotations (rotate the world opposite to camera's rotations)
-        // Pitch (around X-axis, inverse of camera.angle)
-        const negSinAngle = Math.sin(-this.camera.angle * Math.PI / 180);
-        const negCosAngle = Math.cos(-this.camera.angle * Math.PI / 180);
-        const pitchMatrix = [
-            1, 0, 0, 0,
-            0, negCosAngle, negSinAngle, 0,
-            0, -negSinAngle, negCosAngle, 0,
-            0, 0, 0, 1
-        ];
-        viewMatrix = this.multiplyMatrices(viewMatrix, pitchMatrix);
+        // Distance from the center point, inversely proportional to zoom.
+        // Larger zoom value means camera is closer to the subject.
+        const baseDistance = 500; // Arbitrary base distance for zoom = 1.0
+        const distance = baseDistance / cam.zoom;
 
-        // Yaw (around Y-axis, inverse of camera.rotation)
-        const negSinRotation = Math.sin(-this.camera.rotation * Math.PI / 180);
-        const negCosRotation = Math.cos(-this.camera.rotation * Math.PI / 180);
-        const yawMatrix = [
-            negCosRotation, 0, negSinRotation, 0,
-            0, 1, 0, 0,
-            -negSinRotation, 0, negCosRotation, 0,
-            0, 0, 0, 1
-        ];
-        viewMatrix = this.multiplyMatrices(viewMatrix, yawMatrix);
-
-        // Apply zoom (scaling the entire world)
-        const zoomMatrix = [
-            this.camera.zoom, 0, 0, 0,
-            0, this.camera.zoom, 0, 0,
-            0, 0, this.camera.zoom, 0,
-            0, 0, 0, 1
-        ];
-        viewMatrix = this.multiplyMatrices(viewMatrix, zoomMatrix);
+        // Apply pitch (angle around X-axis of the camera's local frame)
+        // Positive angle means looking downwards.
+        // We want to move the camera up (positive Y) and back (positive Z in camera space if looking along -Z)
+        const pitchRad = cam.angle * Math.PI / 180;
         
-        this.gl.uniformMatrix4fv(this.uniforms.projectionMatrix, false, new Float32Array(projectionMatrix));
-        this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, new Float32Array(viewMatrix));
+        // Apply yaw (rotation around world Y-axis)
+        const yawRad = cam.rotation * Math.PI / 180;
 
-        // Calculate and set normal matrix (inverse transpose of the model-view matrix's 3x3 part)
-        const normal3x3 = this.transposeMatrix(this.inverseMatrix(this.get3x3(viewMatrix)));
-        // Convert 3x3 to 4x4 matrix
-        const normal4x4 = [
-            normal3x3[0], normal3x3[1], normal3x3[2], 0,
-            normal3x3[3], normal3x3[4], normal3x3[5], 0,
-            normal3x3[6], normal3x3[7], normal3x3[8], 0,
-            0, 0, 0, 1
-        ];
-        this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, new Float32Array(normal4x4));
+        // Calculate eye position using spherical coordinates relative to the 'center' point
+        // X = r * sin(theta) * cos(phi)
+        // Y = r * cos(theta) -> for Z-up this is height. For Y-up this is Y.
+        // Z = r * sin(theta) * sin(phi)
+        // Here, distance is r.
+        // Pitch (cam.angle) is like theta from XZ plane towards Y.
+        // Yaw (cam.rotation) is like phi in XZ plane from Z axis.
 
-        return viewMatrix; // Return the calculated viewMatrix
+        eye[0] = center[0] - distance * Math.cos(pitchRad) * Math.sin(yawRad);
+        eye[1] = center[1] + distance * Math.sin(pitchRad); // Y is height
+        eye[2] = center[2] - distance * Math.cos(pitchRad) * Math.cos(yawRad); // Z is depth (negative if standard view)
+                                                                            // but lookAt handles direction.
+
+        mat4.lookAt(viewMatrix, eye, center, up);
+        
+        this.gl.uniformMatrix4fv(this.uniforms.projectionMatrix, false, projectionMatrix);
+        // The uModelViewMatrix in the shader will be set per-object.
+        // For terrain and other static elements not part of gameContext.units/buildings,
+        // we can set a base modelViewMatrix here if needed, or handle it in their render functions.
+        // For now, the main viewMatrix is what gets passed to renderTerrain/renderEntities.
+        // The render* methods will then combine this viewMatrix with individual model matrices.
+        // So, what we set as uModelViewMatrix here is effectively the viewMatrix for static parts of the scene.
+        this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, viewMatrix);
+
+
+        const globalNormalMatrix = mat4.create();
+        mat4.invert(globalNormalMatrix, viewMatrix);
+        mat4.transpose(globalNormalMatrix, globalNormalMatrix);
+        this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, globalNormalMatrix);
+
+        return viewMatrix; 
     }
     
-    // Helper function for matrix multiplication (A * B)
-    multiplyMatrices(A, B) {
-        // Ensure A and B are 4x4 matrices (16 elements)
-        if (A.length !== 16 || B.length !== 16) {
-            console.error("Matrices must be 4x4 for multiplication.");
-            return new Array(16).fill(0);
-        }
-
-        let C = new Array(16).fill(0);
-        for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 4; j++) {
-                for (let k = 0; k < 4; k++) {
-                    // Proper matrix multiplication with column-major order
-                    C[i * 4 + j] += A[i * 4 + k] * B[k * 4 + j];
-                }
-            }
-        }
-        return C;
-    }
-
-    // Helper function to get 3x3 sub-matrix from a 4x4 matrix
-    get3x3(matrix) {
-        if (matrix.length !== 16) {
-            console.error("Matrix must be 4x4 to extract 3x3 sub-matrix.");
-            return new Array(9).fill(0);
-        }
-        return [
-            matrix[0], matrix[1], matrix[2],
-            matrix[4], matrix[5], matrix[6],
-            matrix[8], matrix[9], matrix[10]
-        ];
-    }
-
-    // Helper function for matrix inverse (for 3x3)
-    inverseMatrix(m) {
-        if (m.length !== 9) {
-            console.error("Matrix must be 3x3 for inverse calculation.");
-            return new Array(9).fill(0);
-        }
-        const a = m[0], b = m[1], c = m[2];
-        const d = m[3], e = m[4], f = m[5];
-        const g = m[6], h = m[7], i = m[8];
-
-        const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-        if (det === 0) return new Array(9).fill(0); // Return zero matrix if no inverse
-
-        const invdet = 1 / det;
-
-        return [
-            (e * i - f * h) * invdet,
-            (c * h - b * i) * invdet,
-            (b * f - c * e) * invdet,
-
-            (f * g - d * i) * invdet,
-            (a * i - c * g) * invdet,
-            (c * d - a * f) * invdet,
-
-            (d * h - e * g) * invdet,
-            (b * g - a * h) * invdet,
-            (a * e - b * d) * invdet
-        ];
-    }
-
-    // Helper function for matrix transpose (for 3x3)
-    transposeMatrix(m) {
-        if (m.length !== 9) {
-            console.error("Matrix must be 3x3 for transpose calculation.");
-            return new Array(9).fill(0);
-        }
-        return [
-            m[0], m[3], m[6],
-            m[1], m[4], m[7],
-            m[2], m[5], m[8]
-        ];
-    }
-
-    // Convert 3x3 matrix to 4x4 by placing in top-left corner
-    mat3ToMat4(m) {
-        if (m.length !== 9) {
-            console.error("Matrix must be 3x3 for conversion to 4x4.");
-            return [
-                1, 0, 0, 0,
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1
-            ];
-        }
-        return [
-            m[0], m[1], m[2], 0,
-            m[3], m[4], m[5], 0,
-            m[6], m[7], m[8], 0,
-            0, 0, 0, 1
-        ];
-    }
+    // Custom math helper functions (multiplyMatrices, get3x3, inverseMatrix, transposeMatrix, mat3ToMat4)
+    // are now removed as their functionality will be replaced by gl-matrix.
 
     renderTerrain(terrainData, left, right, top, bottom, viewMatrix) {
         // Adjust start/end coordinates to ensure we iterate through the entire terrain grid,
@@ -625,8 +515,9 @@ export class WebGLRenderer {
             // Cross product of tangents to get normal
             // Tangent X: (TILE_SIZE * 2, 0, dX)
             // Tangent Y: (0, TILE_SIZE * 2, dY)
-            // Normal = (dX, dY, -TILE_SIZE * 2) - Adjust for coordinate system
-            const normal = this.normalizeVector([dX, dY, TILE_SIZE * 2]); // Z-up normal
+            const normalUnnormalized = vec3.fromValues(dX, dY, TILE_SIZE * 2); // Z-up normal
+            const normal = vec3.create();
+            vec3.normalize(normal, normalUnnormalized);
 
             return normal;
         };
@@ -840,15 +731,23 @@ export class WebGLRenderer {
                         0, 0, 0, 1
                     ];
 
-                    // Combine with view matrix (already handles camera position and zoom)
-                    let modelViewMatrix = this.multiplyMatrices(viewMatrix, translationMatrix);
-                    modelViewMatrix = this.multiplyMatrices(modelViewMatrix, scalingMatrix);
-
-                    this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, new Float32Array(modelViewMatrix));
+                    // Combine with view matrix 
+                    let modelMatrix = mat4.create();
+                    // Create translation matrix
+                    const translateVec = vec3.fromValues(objWorldX, objWorldY, modelZ);
+                    mat4.fromTranslation(modelMatrix, translateVec);
+                    // Create scaling matrix and apply it
+                    const scaleVec = vec3.fromValues(scaleFactor, scaleFactor, scaleFactor);
+                    mat4.scale(modelMatrix, modelMatrix, scaleVec); // Scale existing modelMatrix
                     
-                    // Also update the normal matrix for the model
-                    const normalMatrix = this.transposeMatrix(this.inverseMatrix(this.get3x3(modelViewMatrix)));
-                    this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, new Float32Array(normalMatrix));
+                    let modelViewMatrix = mat4.create();
+                    mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
+
+                    this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, modelViewMatrix);
+                    
+                    const normalMatrixRender = mat4.create(); // Renamed to avoid conflict with 'normalMatrix' in parent scope
+                    mat4.normalFromMat4(normalMatrixRender, modelViewMatrix);
+                    this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, normalMatrixRender);
 
                     this.gl.drawElements(this.gl.TRIANGLES, geometry.indices.length, this.gl.UNSIGNED_SHORT, 0);
                 }
@@ -856,11 +755,7 @@ export class WebGLRenderer {
         }
     }
 
-    // Helper function to normalize a 3D vector
-    normalizeVector(vec) {
-        const len = Math.sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
-        return len > 0 ? [vec[0] / len, vec[1] / len, vec[2] / len] : [0, 0, 0];
-    }
+    // normalizeVector removed, use vec3.normalize from gl-matrix
 
     renderEntities(gameContext, left, right, top, bottom, viewMatrix) {
         // Helper function for visibility check - make it much more permissive for debugging
@@ -956,15 +851,22 @@ export class WebGLRenderer {
                 ];
 
                 // Combine with view matrix
-                let modelViewMatrix = this.multiplyMatrices(viewMatrix, translationMatrix);
-                modelViewMatrix = this.multiplyMatrices(modelViewMatrix, scalingMatrix);
+                let modelMatrix = mat4.create();
+                const translateVecUnit = vec3.fromValues(unit.x * TILE_SIZE, unit.y * TILE_SIZE, posZ);
+                mat4.fromTranslation(modelMatrix, translateVecUnit);
+                // TODO: Add unit rotation based on unit.angle (e.g., around Z axis)
+                // mat4.rotateZ(modelMatrix, modelMatrix, unit.angleRadians); // Assuming unit.angle is in radians
+                const scaleVecUnit = vec3.fromValues(unitScale, unitScale, unitScale);
+                mat4.scale(modelMatrix, modelMatrix, scaleVecUnit);
 
-                this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, new Float32Array(modelViewMatrix));
+                let modelViewMatrix = mat4.create();
+                mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
+
+                this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, modelViewMatrix);
                 
-                // Also update the normal matrix for the unit
-                const normal3x3 = this.inverseMatrix(this.get3x3(modelViewMatrix));
-                const normalMatrix = this.mat3ToMat4(this.transposeMatrix(normal3x3));
-                this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, new Float32Array(normalMatrix));
+                const normalMatrixRender = mat4.create();
+                mat4.normalFromMat4(normalMatrixRender, modelViewMatrix);
+                this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, normalMatrixRender);
 
                 this.gl.drawElements(this.gl.TRIANGLES, geometry.indices.length, this.gl.UNSIGNED_SHORT, 0);
             });
@@ -1040,15 +942,21 @@ export class WebGLRenderer {
                 ];
 
                 // Combine with view matrix
-                let modelViewMatrix = this.multiplyMatrices(viewMatrix, translationMatrix);
-                modelViewMatrix = this.multiplyMatrices(modelViewMatrix, scalingMatrix);
-
-                this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, new Float32Array(modelViewMatrix));
+                let modelMatrix = mat4.create();
+                const translateVecBuilding = vec3.fromValues(building.x * TILE_SIZE, building.y * TILE_SIZE, posZ);
+                mat4.fromTranslation(modelMatrix, translateVecBuilding);
+                // TODO: Add building rotation if applicable
+                const scaleVecBuilding = vec3.fromValues(buildingScale, buildingScale, buildingScale);
+                mat4.scale(modelMatrix, modelMatrix, scaleVecBuilding);
                 
-                // Also update the normal matrix for the building
-                const normal3x3 = this.inverseMatrix(this.get3x3(modelViewMatrix));
-                const normalMatrix = this.mat3ToMat4(this.transposeMatrix(normal3x3));
-                this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, new Float32Array(normalMatrix));
+                let modelViewMatrix = mat4.create();
+                mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
+
+                this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, modelViewMatrix);
+                
+                const normalMatrixRender = mat4.create();
+                mat4.normalFromMat4(normalMatrixRender, modelViewMatrix);
+                this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, normalMatrixRender);
 
                 this.gl.drawElements(this.gl.TRIANGLES, geometry.indices.length, this.gl.UNSIGNED_SHORT, 0);
             });
