@@ -1,4 +1,5 @@
-import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES, MIN_LAND_PERCENTAGE, MAX_TERRAIN_RETRIES } from '../config/gameConstants.js';
+import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+import { generateTerrain as generateManagedTerrain } from './terrainManager.js'; // Import the managed generator
 
 // Note: gameContext is expected to be an object containing:
 // gameContext.terrain (for the grid)
@@ -68,66 +69,3 @@ export function findWaterPosition(gameContext, targetX, targetY) {
     return { x: bestX, y: bestY };
 }
 
-export function generateTerrain(gameContext, retries = 0) {
-    console.log("Generating terrain...");
-    // GRID_SIZE, TERRAIN_TYPES, MIN_LAND_PERCENTAGE, MAX_TERRAIN_RETRIES, WORLD_SIZE are imported
-    // gameContext.terrain and gameContext.resourceNodes are used
-    for (let x = 0; x < GRID_SIZE; x++) {
-        gameContext.terrain[x] = [];
-        for (let y = 0; y < GRID_SIZE; y++) {
-            const noise1 = Math.sin(x * 0.05) * Math.cos(y * 0.05);
-            const noise2 = Math.sin(x * 0.1 + 100) * Math.cos(y * 0.1 + 100) * 0.5;
-            // Use seeded random for noise and ensure better land distribution
-            const noise = (noise1 + noise2 + (gameContext.seedRandom.random() * 0.1)) * 1.5;  // Adjusted multiplier for more land variation
-
-            if (noise < -0.1) {
-                gameContext.terrain[x][y] = TERRAIN_TYPES.WATER;
-            } else if (noise > 0.7) {
-                gameContext.terrain[x][y] = TERRAIN_TYPES.MOUNTAIN;
-            } else {
-                gameContext.terrain[x][y] = TERRAIN_TYPES.LAND;
-            }
-        }
-    }
-
-    let landTiles = 0;
-    for (let x = 0; x < GRID_SIZE; x++) {
-        for (let y = 0; y < GRID_SIZE; y++) {
-            if (gameContext.terrain[x][y] === TERRAIN_TYPES.LAND) {
-                landTiles++;
-            }
-        }
-    }
-
-    const totalTiles = GRID_SIZE * GRID_SIZE;
-    const landPercentage = landTiles / totalTiles;
-
-    if (landPercentage < MIN_LAND_PERCENTAGE && retries < MAX_TERRAIN_RETRIES) {
-        console.log(`Land percentage ${landPercentage.toFixed(2)} is less than ${MIN_LAND_PERCENTAGE}. Regenerating terrain (attempt ${retries + 1}/${MAX_TERRAIN_RETRIES}).`);
-        return generateTerrain(gameContext, retries + 1);  // Add a check to ensure gameContext is not null
-    } else if (landPercentage < MIN_LAND_PERCENTAGE) {
-        console.warn(`Failed to achieve minimum land percentage after ${MAX_TERRAIN_RETRIES} attempts. Current land: ${landPercentage.toFixed(2)}`);
-        gameContext.terrain = generateDefaultTerrain();  // Fallback to default if retries fail
-    }
-
-    gameContext.resourceNodes.length = 0;
-    for (let i = 0; i < 30; i++) { // Number of resource nodes, ensure on land
-        let x, y;
-        do {
-            x = gameContext.seedRandom.random() * WORLD_SIZE;
-            y = gameContext.seedRandom.random() * WORLD_SIZE;
-            const gridX = Math.floor(x / TILE_SIZE);
-            const gridY = Math.floor(y / TILE_SIZE);
-            if (gameContext.terrain[gridX][gridY] === TERRAIN_TYPES.LAND) { // Only place on land
-                gameContext.resourceNodes.push({
-                    x: x,
-                    y: y,
-                    type: gameContext.seedRandom.random() < 0.5 ? 'mass' : 'energy',
-                    amount: 10000,
-                    maxAmount: 10000,
-                    occupied: false
-                });
-            }
-        } while (gameContext.resourceNodes.length < (i + 1));  // Ensure exactly 30 nodes on land
-    }
-}

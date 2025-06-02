@@ -110,6 +110,24 @@ export function render(gameContext) {
     ctx.fillStyle = '#333';  // Dark background to ensure black canvas is addressed
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Calculate visible world bounds based on camera
+    const visibleWorldLeft = camera.x - camera.canvasWidth / 2 / camera.zoom;
+    const visibleWorldRight = camera.x + camera.canvasWidth / 2 / camera.zoom;
+    const visibleWorldTop = camera.y - camera.canvasHeight / 2 / camera.zoom;
+    const visibleWorldBottom = camera.y + camera.canvasHeight / 2 / camera.zoom;
+
+    // Helper function to check if an object is within the visible bounds
+    const isVisible = (obj) => {
+        // Assuming obj has x, y, and a rough size (e.g., radius or half-width/height)
+        // For simplicity, let's assume a default size if not provided by the object
+        const objSize = obj.radius || (obj.width && obj.height ? Math.max(obj.width, obj.height) : 50); // Default to 50 if no size
+        
+        return obj.x + objSize > visibleWorldLeft &&
+               obj.x - objSize < visibleWorldRight &&
+               obj.y + objSize > visibleWorldTop &&
+               obj.y - objSize < visibleWorldBottom;
+    };
+
     // Draw terrain
     const startX = Math.floor((camera.x - camera.canvasWidth / 2 / camera.zoom) / TILE_SIZE);
     const endX = Math.ceil((camera.x + camera.canvasWidth / 2 / camera.zoom) / TILE_SIZE);
@@ -142,6 +160,9 @@ export function render(gameContext) {
     }
 
     for (const node of resourceNodes) {
+        // Apply frustum culling
+        if (!isVisible(node)) continue;
+
         if (node.amount > 0) {
             const screenX = (node.x - camera.x) * camera.zoom + camera.canvasWidth / 2;
             const screenY = (node.y - camera.y) * camera.zoom + camera.canvasHeight / 2;
@@ -160,25 +181,35 @@ export function render(gameContext) {
     }
 
     for (const building of buildings) {
-        building.draw(ctx, camera);
-    } 
+        if (isVisible(building)) { // Apply frustum culling
+            building.draw(ctx, camera);
+        }
+    }
     for (const unit of units) {
-        unit.draw(ctx, camera, gameContext); // Pass gameContext 
+        if (isVisible(unit)) { // Apply frustum culling
+            unit.draw(ctx, camera, gameContext); // Pass gameContext
+        }
     }
 
     for (const effect of effects) {
-        effect.draw(ctx, camera);
+        if (isVisible(effect)) { // Apply frustum culling
+            effect.draw(ctx, camera);
+        }
     }
 
     // Draw projectiles
     if (gameContext.projectiles) { // Ensure projectiles array exists
         for (const projectile of gameContext.projectiles) {
-            projectile.draw(ctx, camera); // Assuming projectile.draw takes ctx and camera
+            if (isVisible(projectile)) { // Apply frustum culling
+                projectile.draw(ctx, camera); // Assuming projectile.draw takes ctx and camera
+            }
         }
     }
 
     for (const caption of captions) {
-        caption.draw(ctx, camera);
+        if (isVisible(caption)) { // Apply frustum culling
+            caption.draw(ctx, camera);
+        }
     }
 
     // Re-enable window drawing with the flag for testing, but only if allowed

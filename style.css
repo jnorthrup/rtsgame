@@ -1,0 +1,42 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 20px;
+    background-color: #f0f0f0;
+}
+
+h1 {
+    color: #333;
+}
+
+#simulation-container {
+    border: 2px solid #333;
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+#game-canvas {
+    background-color: #e0e0e0;
+}
+
+.terrain-cell {
+    fill: #a0a0a0; /* Default terrain color */
+    stroke: #c0c0c0;
+    stroke-width: 0.5;
+}
+
+.bot {
+    fill: steelblue;
+    stroke: #333;
+    stroke-width: 1;
+}
+
+.bot.team-0 {
+    fill: red;
+}
+
+.bot.team-1 {
+    fill: blue;
+}

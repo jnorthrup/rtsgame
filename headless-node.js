@@ -9,6 +9,10 @@ import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from './js/config/gam
 import { Unit } from './js/core/unit.js';
 import { Building } from './js/core/building.js';
 import { generateTerrain, findLandPosition } from './js/core/terrain.js';
+import express from 'express';
+import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
 
 // Simplified battle journal for Node.js (no localStorage dependency)
 class NodeBattleJournal {
@@ -280,15 +284,72 @@ async function runNodeHeadlessTest() {
     }
 }
 
-// Run the test
+// Recording storage path
+const RECORDINGS_DIR = path.join(process.cwd(), 'recordings');
+if (!fs.existsSync(RECORDINGS_DIR)) {
+    fs.mkdirSync(RECORDINGS_DIR);
+}
+
+// Function to save recording to file
+function saveRecordingToFile(battleId, data) {
+    const filename = path.join(RECORDINGS_DIR, `${battleId}.json`);
+    fs.writeFileSync(filename, JSON.stringify(data, null, 2), 'utf8');
+    console.log(`💾 Recording saved to ${filename}`);
+}
+
+// Initialize Express app
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors()); // Enable CORS for all routes
+app.use(express.json({ limit: '50mb' })); // Increase limit for larger recordings
+
+// API endpoint to receive recordings
+app.post('/recordings', (req, res) => {
+    const recording = req.body;
+    if (!recording || !recording.id || !recording.frames || !recording.events) {
+        return res.status(400).send('Invalid recording data provided.');
+    }
+
+    try {
+        saveRecordingToFile(recording.id, recording);
+        res.status(200).send(`Recording ${recording.id} received and saved.`);
+    } catch (error) {
+        console.error('Failed to save recording:', error);
+        res.status(500).send('Failed to save recording.');
+    }
+});
+
+// Endpoint to run a headless simulation on demand
+app.get('/run-headless-simulation', async (req, res) => {
+    try {
+        console.log('Received request to run headless simulation...');
+        const battleId = await runNodeHeadlessTest(); // This will run the simulation and save its recording
+        res.status(200).send({ message: `Headless simulation completed. Battle ID: ${battleId}` });
+    } catch (error) {
+        console.error('Error running headless simulation:', error);
+        res.status(500).send('Failed to run headless simulation.');
+    }
+});
+
+
+// Command line execution or server start
 if (import.meta.url === `file://${process.argv[1]}`) {
-    runNodeHeadlessTest()
-        .then(() => {
-            console.log('\n🎉 Node.js headless test completed successfully');
-            process.exit(0);
-        })
-        .catch(error => {
-            console.error('❌ Test failed:', error);
-            process.exit(1);
+    if (process.argv.includes('--run-test')) {
+        runNodeHeadlessTest()
+            .then(() => {
+                console.log('\n🎉 Node.js headless test completed successfully');
+                process.exit(0);
+            })
+            .catch(error => {
+                console.error('❌ Test failed:', error);
+                process.exit(1);
+            });
+    } else {
+        app.listen(PORT, () => {
+            console.log(`\n🎧 Node.js Headless Simulation Server listening on port ${PORT}`);
+            console.log(`   POST /recordings to submit battle journals`);
+            console.log(`   GET /run-headless-simulation to trigger a new simulation`);
         });
+    }
 }

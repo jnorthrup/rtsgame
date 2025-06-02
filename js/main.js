@@ -32,9 +32,13 @@ if (!window.gameContext) {
 // Import necessary modules
 import { initInputHandling } from './input/inputHandler.js';
 import { gameLoop, initGame } from './core/game.js'; // Import game loop and initGame as named exports
+import { startRandomSeedRecording } from './core/recordingUtils.js';
+import { SIMULATION_CONFIG } from './config/simulationConfig.js';
+import battleJournal from './ai/battleJournal.js'; // Import battleJournal
 
 // Initial game setup
 // Initialize gameContext properties for the first time
+gameContext.battleJournal = battleJournal; // Assign battleJournal to gameContext
 gameContext.units = [];
 gameContext.buildings = [];
 gameContext.effects = [];
@@ -45,7 +49,9 @@ gameContext.resourceNodes = []; // Initialize resource nodes
 gameContext.pathfindingGrid = []; // Initialize pathfinding grid
 gameContext.resources = { blue: {}, red: {} }; // Initialize resources
 gameContext.camera = {
-    x: 0, y: 0, zoom: 1,
+    x: SIMULATION_CONFIG.CAMERA_START_X,
+    y: SIMULATION_CONFIG.CAMERA_START_Y,
+    zoom: SIMULATION_CONFIG.CAMERA_START_ZOOM,
     canvasWidth: window.innerWidth,  // Use window.innerWidth instead
     canvasHeight: window.innerHeight,  // Use window.innerHeight instead
     minZoom: 0.1, maxZoom: 1000,
@@ -62,29 +68,31 @@ gameContext.gameState = {
     aimingGrenade: false
 };
 
+// Initialize the enhanced journaling system
+import { initializeRecordingSystem } from './core/recordingUtils.js';
+  
 // Initialize the random seed system using native Math.random()
 // For production, you might want a more robust seed generation or a fixed seed for reproducibility.
-gameContext.GAME_SEED = Date.now(); // Example: use current timestamp as seed
+gameContext.GAME_SEED = SIMULATION_CONFIG.GAME_SEED || battleJournal.seed;
 // Replaced Math.seedrandom with a simple wrapper around Math.random for browser compatibility
 gameContext.seedRandom = {
     random: function() { return Math.random(); },
     init: function(seed) { /* Not truly seeded without a library, but keeps the API */ }
 };
 
-// Initialize Battle Journal for recording AI decisions if enabled
-gameContext.RECORD_AI_DECISIONS = false; // Set to true to enable recording
-gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS = 300; // Record for 5 minutes
-if (gameContext.RECORD_AI_DECISIONS) {
-    // Only import if recording is enabled to save resources
-    import('./ai/battleJournal.js').then(module => {
-        gameContext.battleJournal = new module.BattleJournal();
-        console.log("Battle Journal initialized.");
-    }).catch(error => {
-        console.error("Failed to load BattleJournal:", error);
-        gameContext.RECORD_AI_DECISIONS = false; // Disable recording if import fails
-    });
-} else {
-    gameContext.battleJournal = null; // Ensure it's null if not recording
+// Initialize simulation parameters from config
+gameContext.RECORD_AI_DECISIONS = SIMULATION_CONFIG.RECORD_AI_DECISIONS;
+gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS = 10; // Set to exactly 10 seconds for this simulation
+gameContext.HEADLESS_MODE = SIMULATION_CONFIG.HEADLESS_MODE;
+gameContext.JOURNALING_MODE = SIMULATION_CONFIG.JOURNALING_MODE;
+gameContext.JOURNALING_TIMEOUT = SIMULATION_CONFIG.JOURNALING_TIMEOUT_SECONDS;
+
+// Initialize the enhanced journaling system with current game context
+initializeRecordingSystem();
+
+// Start a random seed recording based on configured duration if not using full journaling
+if (gameContext.JOURNALING_MODE !== 'FULL') {
+    startRandomSeedRecording(gameContext, gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS);
 }
 
 // Initialize SelectionManager

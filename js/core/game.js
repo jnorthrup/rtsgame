@@ -2,14 +2,17 @@
 import { UNIT_TYPES } from '../config/unitTypes.js';
 import { BUILDING_TYPES } from '../config/buildingTypes.js';
 import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES, MIN_LAND_PERCENTAGE, MAX_TERRAIN_RETRIES } from '../config/gameConstants.js';
+import { SIMULATION_CONFIG } from '../config/simulationConfig.js';
 import { Unit } from './unit.js';
 import { Building } from './building.js';
 import { Effect } from './effect.js';
 import { Caption } from './caption.js';
 import { GrenadeProjectile } from './projectile.js';
-import { generateTerrain, findLandPosition, findWaterPosition } from './terrain.js';
+import { findLandPosition, findWaterPosition } from './terrain.js';
+import { generateTerrain } from './terrainManager.js';
 import { makeStrategicDecisions, coordinateAttacks } from '../ai/strategicAI.js';
 import { render } from '../rendering/renderer.js'; // Import render function
+import battleJournal from '../ai/battleJournal.js';
 
 export function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -106,8 +109,8 @@ export function initGame(gameContext) {
 
     // NEW: Start recording if enabled
     if (gameContext.RECORD_AI_DECISIONS) {
-        gameContext.battleJournal.startRecording(gameContext.GAME_SEED);
-        console.log(`Battle Journal recording started for ${gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS} seconds.`);
+        gameContext.battleJournal.startRecording(gameContext.GAME_SEED, gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS);
+        console.log(`Battle Journal recording started with seed: ${gameContext.GAME_SEED} for ${gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS} seconds.`);
     }
 
     gameContext.units.length = 0;
@@ -120,8 +123,18 @@ export function initGame(gameContext) {
     gameContext.gameState.events = [];
     gameContext.selectionManager.clearSelection(); // Clear selection on game init
 
-    gameContext.resources.blue = { mass: 100, energy: 150, massIncome: 0, energyIncome: 0 };
-    gameContext.resources.red = { mass: 100, energy: 150, massIncome: 0, energyIncome: 0 };
+    gameContext.resources.blue = {
+        mass: SIMULATION_CONFIG.INITIAL_BLUE_MASS,
+        energy: SIMULATION_CONFIG.INITIAL_BLUE_ENERGY,
+        massIncome: 0,
+        energyIncome: 0
+    };
+    gameContext.resources.red = {
+        mass: SIMULATION_CONFIG.INITIAL_RED_MASS,
+        energy: SIMULATION_CONFIG.INITIAL_RED_ENERGY,
+        massIncome: 0,
+        energyIncome: 0
+    };
 
     let blueStart = null;
     let redStart = null;
@@ -155,7 +168,7 @@ export function initGame(gameContext) {
 
     for (let i = 0; i < MAX_INIT_RETRIES; i++) {
         console.log(`Attempt ${i + 1}/${MAX_INIT_RETRIES} to generate terrain and find start spots for both teams.`);
-        generateTerrain(gameContext); // This should internally use seedRandom.random() now
+        generateTerrain(gameContext, 'perlinNoiseGenerator'); // Specify the terrain generator
         blueStart = findLandPosition(gameContext, WORLD_SIZE * 0.2, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
         redStart = findLandPosition(gameContext, WORLD_SIZE * 0.8, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
 
@@ -173,7 +186,7 @@ export function initGame(gameContext) {
         console.log("Initial attempts failed for BLUE commander. Starting focused retries for BLUE...");
         for (let i = 0; i < FOCUSED_PLACEMENT_RETRIES; i++) {
             console.log(`Focused attempt ${i + 1}/${FOCUSED_PLACEMENT_RETRIES} for BLUE commander placement.`);
-            generateTerrain(gameContext);
+            generateTerrain(gameContext, 'perlinNoiseGenerator');
             blueStart = findLandPosition(gameContext, WORLD_SIZE * 0.2, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
             if (blueStart) {
                 console.log(`Successfully found starting position for BLUE team after focused attempt ${i + 1}.`);
@@ -187,7 +200,7 @@ export function initGame(gameContext) {
         console.log("Initial attempts failed for RED commander (or Blue was found but Red wasn't). Starting focused retries for RED...");
         for (let i = 0; i < FOCUSED_PLACEMENT_RETRIES; i++) {
             console.log(`Focused attempt ${i + 1}/${FOCUSED_PLACEMENT_RETRIES} for RED commander placement.`);
-            generateTerrain(gameContext);
+            generateTerrain(gameContext, 'perlinNoiseGenerator');
             if (blueStart && !findLandPosition(gameContext, blueStart.x, blueStart.y, COMMANDER_START_AREA_SIZE)) {
                  console.warn("Previously found BLUE start position is no longer valid after terrain regeneration for RED. Blue may need to use fallback.");
             }
@@ -220,18 +233,50 @@ export function initGame(gameContext) {
     gameContext.camera.x = WORLD_SIZE / 2;
     gameContext.camera.y = WORLD_SIZE / 2;
     gameContext.camera.zoom = 0.5;
+// Add demo recording functions to gameContext
+gameContext.selectDemoRecording = selectDemoRecording;
+gameContext.playDemo = playDemo;
     addEvent(gameContext, 'strategic', 'Battle commenced!', 3);
 }
  
 export function update(gameContext) {
     if (gameContext.gameState.paused || gameContext.gameState.winner) return;
-    gameContext.gameState.gameTime += 1 / 60;
+
+    // Calculate delta time for frame-rate independent updates
+    const now = performance.now();
+    if (!gameContext.lastUpdateTime) {
+        gameContext.lastUpdateTime = now;
+    }
+    const deltaTime = (now - gameContext.lastUpdateTime) / 1000; // in seconds
+    gameContext.lastUpdateTime = now;
+
+    gameContext.gameState.gameTime += deltaTime; // Advance game time based on actual elapsed time
 
     // NEW: Stop recording if duration reached
     if (gameContext.RECORD_AI_DECISIONS && gameContext.gameState.gameTime >= gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS) {
-        gameContext.battleJournal.stopRecording();
+        const recording = gameContext.battleJournal.stopRecording();
+        if (recording) {
+            console.log("Recording complete. Sending to Node.js server...");
+            fetch('http://localhost:3000/recordings', { // Assuming Node.js server runs on port 3000
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(recording),
+            })
+            .then(response => {
+                if (response.ok) {
+                    console.log('Recording successfully sent to server.');
+                } else {
+                    console.error('Failed to send recording to server:', response.status, response.statusText);
+                }
+            })
+            .catch(error => {
+                console.error('Error sending recording to server:', error);
+            });
+        }
         // Set winner to end game loop in main.js
-        gameContext.gameState.winner = "RECORDING_COMPLETE"; 
+        gameContext.gameState.winner = "RECORDING_COMPLETE";
         return; // Stop further updates in this frame
     }
 
@@ -258,9 +303,9 @@ export function update(gameContext) {
         }
     }
 
-    for (let i = gameContext.units.length - 1; i >= 0; i--) { 
+    for (let i = gameContext.units.length - 1; i >= 0; i--) {
         const unit = gameContext.units[i];
-        unit.update(gameContext);
+        unit.update(gameContext, deltaTime);
         if (unit.hp <= 0) {
             if (unit.type === UNIT_TYPES.commander) {
                 gameContext.gameState.winner = unit.team === 'blue' ? 'RED' : 'BLUE';
@@ -284,7 +329,7 @@ export function update(gameContext) {
         const building = gameContext.buildings[i];
         // Pass the entire gameContext to building.update to access all global components
         // (including the selectionManager if a building ever needs to interact with selection)
-        building.update(gameContext); 
+        building.update(gameContext, deltaTime);
         if (building.hp <= 0) {
             if (building.type.produces || building.type.resourceGeneration) {
                 gameContext.captions.push(new Caption(building.x, building.y, 'Structure lost!', '#f88', 12));
@@ -301,7 +346,7 @@ export function update(gameContext) {
 
     for (let i = gameContext.effects.length - 1; i >= 0; i--) {
         const effect = gameContext.effects[i];
-        effect.update();
+        effect.update(deltaTime);
         if (effect.life <= 0 && effect.particles.every(p => p.life <= 0)) {
             gameContext.effects.splice(i, 1);
         }
@@ -309,7 +354,7 @@ export function update(gameContext) {
 
     for (let i = gameContext.captions.length - 1; i >= 0; i--) {
         const caption = gameContext.captions[i];
-        caption.update();
+        caption.update(deltaTime);
         if (caption.life <= 0) {
             gameContext.captions.splice(i, 1);
         }
@@ -319,7 +364,7 @@ export function update(gameContext) {
     if (gameContext.projectiles) {
         for (let i = gameContext.projectiles.length - 1; i >= 0; i--) {
             const projectile = gameContext.projectiles[i];
-            projectile.update(gameContext);
+            projectile.update(gameContext, deltaTime);
             if (projectile.isExpired) {
                 gameContext.projectiles.splice(i, 1);
             }
@@ -349,6 +394,95 @@ export function update(gameContext) {
     }
 }
 
+// Define demo recordings with specific strategic events
+const demoRecordings = [
+    // Recording 1: Basic attack on red commander
+    {
+        name: "Demo 1: Commander Attack",
+        description: "Basic recording showing how to attack an enemy commander",
+        duration: 10,
+        actions: [
+            { time: 2, type: "strategic", message: "Blue commander spots red commander and initiates attack", importance: 3 },
+            { time: 4, type: "battle", message: "Blue commander fires on red commander", importance: 2, position: { x: 400, y: 300 } },
+            { time: 6, type: "strategic", message: "Blue commander retreats slightly to avoid counter-attack", importance: 2 },
+            { time: 8, type: "battle", message: "Red commander fires back at blue commander", importance: 2, position: { x: 410, y: 310 } },
+            { time: 9, type: "strategic", message: "Blue commander returns fire", importance: 2 }
+        ]
+    },
+    
+    // Recording 2: Unit support coordination
+    {
+        name: "Demo 2: Unit Support",
+        description: "Shows how units can provide support during battle",
+        duration: 10,
+        actions: [
+            { time: 1, type: "strategic", message: "Blue tier 1 units advancing towards red commander", importance: 2 },
+            { time: 3, type: "battle", message: "Red commander fires on approaching blue units", importance: 2, position: { x: 420, y: 320 } },
+            { time: 5, type: "strategic", message: "Blue tier 2 units move in to support", importance: 2 },
+            { time: 7, type: "battle", message: "Blue tier 1 units destroy red tier 1 units", importance: 2, position: { x: 400, y: 300 } },
+            { time: 9, type: "strategic", message: "Blue commander finishes off weakened red commander", importance: 2 }
+        ]
+    },
+];
+
+// Function to play a demo recording
+function playDemo(gameContext, recordingIndex) {
+    if (!gameContext.demoRecordings || !gameContext.demoRecordings.length) {
+        gameContext.demoRecordings = [...demoRecordings];
+    }
+    
+    const recording = gameContext.demoRecordings[recordingIndex % gameContext.demoRecordings.length];
+    gameContext.RECORD_AI_DECISIONS = true;
+    gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS = recording.duration;
+    gameContext.currentDemoIndex = recordingIndex % gameContext.demoRecordings.length;
+    
+    // Start the recording
+    initGame(gameContext);
+    gameContext.battleJournal.startRecording(gameContext.GAME_SEED, recording.duration);
+    
+    // Log the start of the demo
+    console.log(`Starting demo recording: ${recording.name}`);
+    addEvent(gameContext, 'info', `Starting ${recording.name}: ${recording.description}`, 1);
+    
+    // Play the recording events
+    recording.actions.forEach(action => {
+        // Schedule the action to occur at the specified time
+        const timeout = setTimeout(() => {
+            addEvent(gameContext, action.type, action.message, action.importance, action.position);
+        }, action.time * 1000);
+        
+        // Store the timeout ID to clear it if the recording ends early
+        gameContext.demoTimers = gameContext.demoTimers || [];
+        gameContext.demoTimers.push(timeout);
+    });
+    
+    return recording.name;
+}
+
+// Add demo selection function to the game context
+function selectDemoRecording(gameContext, recordingIndex) {
+    if (!gameContext.demoRecordings || !gameContext.demoRecordings.length) {
+        gameContext.demoRecordings = [...demoRecordings];
+    }
+    
+    const recording = gameContext.demoRecordings[recordingIndex % gameContext.demoRecordings.length];
+    gameContext.RECORD_AI_DECISIONS = true;
+    gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS = recording.duration;
+    gameContext.currentDemoIndex = recordingIndex % gameContext.demoRecordings.length;
+    
+    // Log the selected demo
+    console.log(`Selected demo recording: ${recording.name}`);
+    if (gameContext.RECORD_AI_DECISIONS && gameContext.battleJournal) {
+        gameContext.battleJournal.recordEvent('info', `Demo recording selected: ${recording.name}`, gameContext.gameState.gameTime);
+    }
+    
+    // Add the selection event to the journal
+    addEvent(gameContext, 'info', `Selected demo recording: ${recording.name}`, 2);
+    
+    return recording.name;
+}
+
+
 export function gameLoop(timestamp, gameContext) {
     if (!gameContext.lastFpsTime) gameContext.lastFpsTime = 0;
     if (!gameContext.frameCount) gameContext.frameCount = 0;
@@ -366,6 +500,10 @@ export function gameLoop(timestamp, gameContext) {
 
     // NEW: Check if game should terminate due to recording duration or winner
     if (gameContext.gameState.winner === "RECORDING_COMPLETE") {
+        // Ensure all journal entries are properly saved
+        if (gameContext.battleJournal && gameContext.battleJournal.isRecording) {
+            gameContext.battleJournal.stopRecording();
+        }
         return false; // Signal to main loop to stop
     }
     if (gameContext.gameState.winner && gameContext.gameState.winner !== "RECORDING_COMPLETE") {

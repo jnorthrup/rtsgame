@@ -8,7 +8,8 @@ import { BUILDING_TYPES } from './js/config/buildingTypes.js';
 import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from './js/config/gameConstants.js';
 import { Unit } from './js/core/unit.js';
 import { Building } from './js/core/building.js';
-import { generateTerrain, findLandPosition } from './js/core/terrain.js';
+import { generateTerrain } from './js/core/terrainManager.js';
+import { findLandPosition } from './js/core/terrain.js';
 
 class BattleSimulator {
     constructor() {
@@ -408,6 +409,9 @@ class BattleSimulator {
             units, buildings, resources, gameState, terrain, resourceNodes,
             UNIT_TYPES, BUILDING_TYPES, WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES,
             Unit, Building,
+            seedRandom: {
+                random: () => Math.random()
+            },
             addEvent: (ctx, type, msg, importance, pos) => {
                 if (importance >= 2) {
                     this.logEvent(simulation, type.toUpperCase(), msg, pos);

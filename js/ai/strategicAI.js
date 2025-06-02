@@ -715,11 +715,14 @@ function calculateFormationPositions(centerX, centerY, unitCount, formation) {
 // Updated to receive gameContext
 function recordAIDecision(gameContext, team, decisionType, data) {
     if (gameContext.battleJournal && gameContext.battleJournal.isRecording) { // Check if battleJournal exists and is recording
-        gameContext.battleJournal.recordInputCommand(decisionType, { // Use gameContext.battleJournal
-            ...data,
-            aiTeam: team,
-            timestamp: gameContext.gameState.gameTime // Use game time for replay consistency
-        }, `ai_${team}`);
+        gameContext.battleJournal.recordEvent(decisionType, // type
+            `AI decision for ${team}: ${decisionType}`, // message
+            gameContext.gameState.gameTime, // gameTime
+            { // details
+                ...data,
+                aiTeam: team
+            }
+        );
     }
 }
 
