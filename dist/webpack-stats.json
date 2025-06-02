@@ -1,0 +1,19 @@
+{
+  "bundler": "webpack",
+  "buildTime": 1427,
+  "assets": [
+    {
+      "name": "webpack-bundle.js",
+      "size": 33030,
+      "sizeKB": "32.26"
+    },
+    {
+      "name": "374.js",
+      "size": 1101,
+      "sizeKB": "1.08"
+    }
+  ],
+  "totalSize": 34131,
+  "warnings": 0,
+  "errors": 0
+}

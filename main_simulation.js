@@ -30,7 +30,7 @@ const TERRAIN_COLORS = {
 };
 
 const TEAM_COLORS = {
-    'blue': [0.1, 0.1, 0.8, 1.0], // Dark Blue
+    'blue': [0.3, 0.5, 1.0, 1.0], // Bright Blue
     'red': [0.8, 0.1, 0.1, 1.0]   // Dark Red
 };
 
@@ -53,77 +53,131 @@ let camera = {
     x: 0, y: 0, zoom: 1.0,
     targetX: 0, targetY: 0, targetZoom: 1.0,
     velocityX: 0, velocityY: 0, velocityZoom: 0,
-    isDragging: false, lastMouseX: 0, lastMouseY: 0
-}; // Enhanced camera state with smooth interpolation
+    isDragging: false, lastMouseX: 0, lastMouseY: 0,
+    angle: 0, targetAngle: 0, // Camera pitch angle (0 = top-down, higher = more angled)
+    rotation: 0, targetRotation: 0 // Camera yaw rotation
+}; // Enhanced camera state with smooth interpolation and angle control
 const ZOOM_FACTOR = 1.2; // How much to zoom in/out
 const MIN_ZOOM = 0.01; // Roughly "10 miles up" (very zoomed out)
 const MAX_ZOOM = 50.0;  // Roughly "1 meter" (very zoomed in) - increased for trait viewing
 const CAMERA_SMOOTHING = 0.15; // Camera interpolation factor (lower = smoother)
 const MOMENTUM_DECAY = 0.95; // How quickly momentum dies down
 
+// Dynamic angle constants
+const MAX_STRATEGIC_ZOOM = 2.0; // Above this zoom = top-down strategic view
+const MIN_TACTICAL_ZOOM = 8.0; // Below this zoom = maximum tactical angle
+const MAX_TACTICAL_ANGLE = 45; // Maximum camera angle in degrees for tactical view
+
+// WASD movement speed
+const KEYBOARD_MOVE_SPEED = 5; // Base movement speed
+const MODIFIER_SPEED_MULTIPLIER = 3; // Speed multiplier for shift key
+
+// Keyboard state tracking
+const keys = {
+    w: false, a: false, s: false, d: false,
+    shift: false, ctrl: false, alt: false
+};
+
+// Topographical terrain generation with elevation and sea level
+const SEA_LEVEL = 0.3; // Elevation threshold for water (0.0 = lowest, 1.0 = highest)
+const MOUNTAIN_LEVEL = 0.7; // Elevation threshold for mountains
+const RESOURCE_FREQUENCY = 0.05; // Chance for resource deposits
+
+function generateHeightmap(size) {
+    const heightmap = [];
+    const resourceMap = [];
+    
+    // Initialize arrays
+    for (let x = 0; x < size; x++) {
+        heightmap[x] = [];
+        resourceMap[x] = [];
+        for (let y = 0; y < size; y++) {
+            heightmap[x][y] = 0;
+            resourceMap[x][y] = false;
+        }
+    }
+    
+    // Generate multiple octaves of noise for realistic terrain
+    for (let octave = 0; octave < 4; octave++) {
+        const frequency = Math.pow(2, octave) * 0.1;
+        const amplitude = Math.pow(0.5, octave);
+        
+        for (let x = 0; x < size; x++) {
+            for (let y = 0; y < size; y++) {
+                // Simple noise generation using multiple sine waves
+                const noise1 = Math.sin(x * frequency) * Math.cos(y * frequency);
+                const noise2 = Math.sin(x * frequency * 1.7) * Math.cos(y * frequency * 1.3);
+                const noise3 = simulationRandom.random() * 0.2 - 0.1; // Random variation
+                
+                heightmap[x][y] += (noise1 + noise2 + noise3) * amplitude;
+            }
+        }
+    }
+    
+    // Normalize heightmap to 0-1 range
+    let minHeight = Infinity, maxHeight = -Infinity;
+    for (let x = 0; x < size; x++) {
+        for (let y = 0; y < size; y++) {
+            minHeight = Math.min(minHeight, heightmap[x][y]);
+            maxHeight = Math.max(maxHeight, heightmap[x][y]);
+        }
+    }
+    
+    const heightRange = maxHeight - minHeight;
+    for (let x = 0; x < size; x++) {
+        for (let y = 0; y < size; y++) {
+            heightmap[x][y] = (heightmap[x][y] - minHeight) / heightRange;
+            
+            // Place resources on elevated areas near sea level
+            if (heightmap[x][y] > SEA_LEVEL + 0.1 && heightmap[x][y] < SEA_LEVEL + 0.3) {
+                if (simulationRandom.random() < RESOURCE_FREQUENCY) {
+                    resourceMap[x][y] = true;
+                }
+            }
+        }
+    }
+    
+    return { heightmap, resourceMap };
+}
+
 function initializeTerrain(size) {
+    const { heightmap, resourceMap } = generateHeightmap(size);
     const newTerrain = [];
+    
     for (let x = 0; x < size; x++) {
         newTerrain[x] = [];
         for (let y = 0; y < size; y++) {
-            const rand = simulationRandom.random();
-            if (rand < 0.15) { // Less water for more land
-                newTerrain[x][y] = TERRAIN_TYPES.WATER;
-            } else if (rand < 0.35) { // Mountains
-                newTerrain[x][y] = TERRAIN_TYPES.MOUNTAIN;
-            } else if (rand < 0.40) { // Small chance for resources
-                newTerrain[x][y] = TERRAIN_TYPES.RESOURCE;
-            }
-            else { // More land
-                newTerrain[x][y] = TERRAIN_TYPES.LAND;
-            }
-        }
-    }
-    // Apply a simple smoothing pass to encourage larger terrain blocks and better landbridges
-    const smoothedTerrain = JSON.parse(JSON.stringify(newTerrain)); // Deep copy
-    for (let i = 0; i < 2; i++) { // Two passes for more pronounced effect
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
-                const currentType = newTerrain[x][y];
-                const rand = simulationRandom.random(); // Define rand for smoothing algorithm
-                const neighbors = [];
-                // Check 8 neighbors
-                for (let dx = -1; dx <= 1; dx++) {
-                    for (let dy = -1; dy <= 1; dy++) {
-                        if (dx === 0 && dy === 0) continue;
-                        const nx = x + dx;
-                        const ny = y + dy;
-                        if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
-                            neighbors.push(newTerrain[nx][ny]);
-                        }
-                    }
-                }
-
-                const waterNeighbors = neighbors.filter(t => t === TERRAIN_TYPES.WATER).length;
-                const landNeighbors = neighbors.filter(t => t === TERRAIN_TYPES.LAND).length;
-                const mountainNeighbors = neighbors.filter(t => t === TERRAIN_TYPES.MOUNTAIN).length;
-                const resourceNeighbors = neighbors.filter(t => t === TERRAIN_TYPES.RESOURCE).length;
-
-                // Simple rule: if significantly more water neighbors, turn to water (helps cohere oceans)
-                if (currentType !== TERRAIN_TYPES.WATER && waterNeighbors >= 5) {
-                    smoothedTerrain[x][y] = TERRAIN_TYPES.WATER;
-                }
-                // If mostly land, turn to land (helps cohere landmasses)
-                else if (currentType !== TERRAIN_TYPES.LAND && landNeighbors >= 5) {
-                    smoothedTerrain[x][y] = TERRAIN_TYPES.LAND;
-                }
-                // If current is land/water and many mountain neighbors, may become mountain
-                else if (currentType !== TERRAIN_TYPES.MOUNTAIN && mountainNeighbors >= 4 && rand < 0.7) {
-                    smoothedTerrain[x][y] = TERRAIN_TYPES.MOUNTAIN;
-                }
-                // If current is land/mountain/water and many resource neighbors, may become resource
-                else if (currentType !== TERRAIN_TYPES.RESOURCE && resourceNeighbors >= 3 && rand < 0.6) {
-                    smoothedTerrain[x][y] = TERRAIN_TYPES.RESOURCE;
-                }
+            const elevation = heightmap[x][y];
+            
+            if (resourceMap[x][y]) {
+                newTerrain[x][y] = {
+                    type: TERRAIN_TYPES.RESOURCE,
+                    elevation: elevation,
+                    hasResource: true
+                };
+            } else if (elevation <= SEA_LEVEL) {
+                newTerrain[x][y] = {
+                    type: TERRAIN_TYPES.WATER,
+                    elevation: elevation,
+                    hasResource: false
+                };
+            } else if (elevation >= MOUNTAIN_LEVEL) {
+                newTerrain[x][y] = {
+                    type: TERRAIN_TYPES.MOUNTAIN,
+                    elevation: elevation,
+                    hasResource: false
+                };
+            } else {
+                newTerrain[x][y] = {
+                    type: TERRAIN_TYPES.LAND,
+                    elevation: elevation,
+                    hasResource: false
+                };
             }
         }
     }
-    return smoothedTerrain;
+    
+    return newTerrain;
 }
 
 function updateBot(bot, currentTerrain, allBots, time, eventLog) {
@@ -148,7 +202,7 @@ function updateBot(bot, currentTerrain, allBots, time, eventLog) {
         else if (direction === 2 && bot.y < currentTerrain.length - 1) newY++;
         else if (direction === 3 && bot.x > 0) newX--;
 
-        if (newX >= 0 && newX < GRID_SIZE && newY >= 0 && newY < GRID_SIZE && currentTerrain[newX][newY] !== TERRAIN_TYPES.WATER) {
+        if (newX >= 0 && newX < GRID_SIZE && newY >= 0 && newY < GRID_SIZE && currentTerrain[newX][newY].type !== TERRAIN_TYPES.WATER) {
             bot.x = newX;
             bot.y = newY;
             bot.action = 'move';
@@ -187,10 +241,11 @@ function renderScene(currentTerrain, currentBots, rendererType) {
                 rect.setAttribute('height', TILE_SIZE);
                 rect.classList.add('terrain-cell');
                 // Map numerical terrain type to class name for CSS styling
-                switch (currentTerrain[x][y]) {
+                switch (currentTerrain[x][y].type) {
                     case TERRAIN_TYPES.WATER: rect.classList.add('water'); break;
                     case TERRAIN_TYPES.LAND: rect.classList.add('land'); break;
                     case TERRAIN_TYPES.MOUNTAIN: rect.classList.add('mountain'); break;
+                    case TERRAIN_TYPES.RESOURCE: rect.classList.add('resource'); break;
                 }
                 gameSvg.appendChild(rect);
             }
@@ -215,12 +270,15 @@ function renderScene(currentTerrain, currentBots, rendererType) {
         // Render terrain
         for (let x = 0; x < GRID_SIZE; x++) {
             for (let y = 0; y < GRID_SIZE; y++) {
-                const terrainType = currentTerrain[x][y];
+                const terrain = currentTerrain[x][y];
+                const terrainType = terrain.type;
+                const elevation = terrain.elevation;
                 let color;
                 switch (terrainType) {
-                    case TERRAIN_TYPES.WATER: color = 'rgba(0, 51, 128, 1.0)'; break; // Blue
-                    case TERRAIN_TYPES.LAND: color = 'rgba(51, 153, 51, 1.0)'; break;  // Green
-                    case TERRAIN_TYPES.MOUNTAIN: color = 'rgba(102, 102, 102, 1.0)'; break; // Gray
+                    case TERRAIN_TYPES.WATER: color = `rgba(0, ${Math.floor(51 + elevation * 50)}, 128, 1.0)`; break; // Varying blue depth
+                    case TERRAIN_TYPES.LAND: color = `rgba(${Math.floor(51 + elevation * 100)}, 153, 51, 1.0)`; break;  // Varying green height
+                    case TERRAIN_TYPES.MOUNTAIN: color = `rgba(${Math.floor(102 + elevation * 100)}, ${Math.floor(102 + elevation * 100)}, ${Math.floor(102 + elevation * 100)}, 1.0)`; break; // Varying gray
+                    case TERRAIN_TYPES.RESOURCE: color = 'rgba(255, 215, 0, 1.0)'; break; // Gold for resources
                     default: color = 'rgba(0, 0, 0, 1.0)'; // Black
                 }
                 ctx.fillStyle = color;
@@ -250,8 +308,20 @@ function renderScene(currentTerrain, currentBots, rendererType) {
         // Render terrain
         for (let x = 0; x < GRID_SIZE; x++) {
             for (let y = 0; y < GRID_SIZE; y++) {
-                const terrainType = currentTerrain[x][y];
-                const color = TERRAIN_COLORS[terrainType];
+                const terrain = currentTerrain[x][y];
+                const terrainType = terrain.type;
+                const elevation = terrain.elevation;
+                let color = TERRAIN_COLORS[terrainType];
+                
+                // Adjust color intensity based on elevation
+                if (color) {
+                    color = [
+                        Math.min(1.0, color[0] + elevation * 0.3),
+                        Math.min(1.0, color[1] + elevation * 0.3),
+                        Math.min(1.0, color[2] + elevation * 0.3),
+                        color[3]
+                    ];
+                }
                 currentRenderer.drawRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE, color);
             }
         }
@@ -359,6 +429,77 @@ gameCanvas.addEventListener('mousemove', handleMouseMove);
 gameCanvas.addEventListener('mouseup', handleMouseUp);
 gameCanvas.addEventListener('mouseleave', handleMouseUp);
 
+// Keyboard controls for camera movement (like FAF/Supreme Commander)
+document.addEventListener('keydown', handleKeyDown);
+document.addEventListener('keyup', handleKeyUp);
+
+function handleKeyDown(e) {
+    switch(e.code) {
+        case 'KeyW': keys.w = true; break;
+        case 'KeyA': keys.a = true; break;
+        case 'KeyS': keys.s = true; break;
+        case 'KeyD': keys.d = true; break;
+        case 'ShiftLeft':
+        case 'ShiftRight': keys.shift = true; break;
+        case 'ControlLeft':
+        case 'ControlRight': keys.ctrl = true; break;
+        case 'AltLeft':
+        case 'AltRight': keys.alt = true; break;
+    }
+}
+
+function handleKeyUp(e) {
+    switch(e.code) {
+        case 'KeyW': keys.w = false; break;
+        case 'KeyA': keys.a = false; break;
+        case 'KeyS': keys.s = false; break;
+        case 'KeyD': keys.d = false; break;
+        case 'ShiftLeft':
+        case 'ShiftRight': keys.shift = false; break;
+        case 'ControlLeft':
+        case 'ControlRight': keys.ctrl = false; break;
+        case 'AltLeft':
+        case 'AltRight': keys.alt = false; break;
+    }
+}
+
+function processKeyboardInput() {
+    if (!currentRenderer || rendererSelect.value !== 'webgl3d') return;
+    
+    const baseSpeed = KEYBOARD_MOVE_SPEED;
+    const speed = keys.shift ? baseSpeed * MODIFIER_SPEED_MULTIPLIER : baseSpeed;
+    const moveAmount = speed / camera.zoom;
+    
+    // WASD movement
+    if (keys.w) camera.targetY -= moveAmount; // Move up
+    if (keys.s) camera.targetY += moveAmount; // Move down
+    if (keys.a) camera.targetX -= moveAmount; // Move left
+    if (keys.d) camera.targetX += moveAmount; // Move right
+    
+    // Ctrl + mouse wheel for rotation (future enhancement)
+    // Alt + WASD for different movement modes (future enhancement)
+}
+
+function calculateDynamicCameraAngle() {
+    // Calculate target angle based on zoom level (FAF-style)
+    let targetAngle = 0;
+    
+    if (camera.zoom > MAX_STRATEGIC_ZOOM) {
+        // Strategic view: top-down (0 degrees)
+        targetAngle = 0;
+    } else if (camera.zoom < MIN_TACTICAL_ZOOM) {
+        // Maximum tactical angle
+        targetAngle = MAX_TACTICAL_ANGLE;
+    } else {
+        // Interpolate between strategic and tactical angles
+        const zoomRange = MIN_TACTICAL_ZOOM - MAX_STRATEGIC_ZOOM;
+        const zoomFactor = (camera.zoom - MAX_STRATEGIC_ZOOM) / zoomRange;
+        targetAngle = MAX_TACTICAL_ANGLE * (1 - zoomFactor);
+    }
+    
+    camera.targetAngle = targetAngle;
+}
+
 function adjustZoom(factor) {
     if (currentRenderer && rendererSelect.value === 'webgl3d') {
         const newZoom = camera.targetZoom * factor;
@@ -459,6 +600,12 @@ function stopCameraAnimation() {
 // Smooth camera interpolation function
 function updateCamera() {
     if (currentRenderer && rendererSelect.value === 'webgl3d') {
+        // Process keyboard input for WASD movement
+        processKeyboardInput();
+        
+        // Calculate dynamic camera angle based on zoom
+        calculateDynamicCameraAngle();
+        
         // Apply momentum when not dragging
         if (!camera.isDragging) {
             camera.targetX += camera.velocityX / camera.zoom;
@@ -471,12 +618,16 @@ function updateCamera() {
         camera.x += (camera.targetX - camera.x) * CAMERA_SMOOTHING;
         camera.y += (camera.targetY - camera.y) * CAMERA_SMOOTHING;
         camera.zoom += (camera.targetZoom - camera.zoom) * CAMERA_SMOOTHING;
+        camera.angle += (camera.targetAngle - camera.angle) * CAMERA_SMOOTHING;
+        camera.rotation += (camera.targetRotation - camera.rotation) * CAMERA_SMOOTHING;
         
-        // Update renderer camera
+        // Update renderer camera with angle and rotation
         currentRenderer.updateCamera({
             x: camera.x,
             y: camera.y,
             zoom: camera.zoom,
+            angle: camera.angle,
+            rotation: camera.rotation,
             canvasWidth: gameCanvas.width,
             canvasHeight: gameCanvas.height
         });

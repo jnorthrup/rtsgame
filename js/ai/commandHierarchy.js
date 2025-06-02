@@ -560,7 +560,7 @@ export class CommandGroup {
         let bestScore = 0;
         
         for (const target of enemies) {
-            const score = this.scoreStrikeTarget(target);
+            const score = this.scoreStrikeTarget(target, gameContext);
             if (score > bestScore) {
                 bestScore = score;
                 bestTarget = target;
@@ -570,7 +570,7 @@ export class CommandGroup {
         return bestTarget;
     }
 
-    scoreStrikeTarget(target) {
+    scoreStrikeTarget(target, gameContext) {
         let score = 10; // Base score
         
         // Higher value for important targets

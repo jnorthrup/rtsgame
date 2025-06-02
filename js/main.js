@@ -6,11 +6,10 @@ if (!window.gameContext) {
     // Get the canvas element and its 2D rendering context, add them to gameContext
     window.gameContext.canvas = gameContext.canvas || document.getElementById('gameCanvas');
     if (window.gameContext.canvas) {
-        window.gameContext.ctx = window.gameContext.canvas.getContext('2d');
         // Ensure canvas dimensions match window dimensions for full-screen rendering
         window.gameContext.canvas.width = window.innerWidth;
         window.gameContext.canvas.height = window.innerHeight;
-        console.log("Canvas context initialized successfully in main.js!");
+        console.log("Canvas initialized successfully in main.js!");
     } else {
         console.error("Game canvas element not found!");
     }
@@ -35,10 +34,15 @@ import { gameLoop, initGame } from './core/game.js'; // Import game loop and ini
 import { startRandomSeedRecording } from './core/recordingUtils.js';
 import { SIMULATION_CONFIG } from './config/simulationConfig.js';
 import battleJournal from './ai/battleJournal.js'; // Import battleJournal
+import { Effect } from './core/effect.js'; // Import Effect class
+import { Caption } from './core/caption.js'; // Import Caption class
+import { initRenderer as initWebGLRenderer } from './js_rewritten/rendering/webglRenderer.js'; // Import WebGL renderer
 
 // Initial game setup
 // Initialize gameContext properties for the first time
 gameContext.battleJournal = battleJournal; // Assign battleJournal to gameContext
+gameContext.Effect = Effect; // Assign Effect class to gameContext
+gameContext.Caption = Caption; // Assign Caption class to gameContext
 gameContext.units = [];
 gameContext.buildings = [];
 gameContext.effects = [];
@@ -57,7 +61,9 @@ gameContext.camera = {
     minZoom: 0.1, maxZoom: 1000,
     autoCamera: true,
     cameraTarget: null,
-    cameraTimer: 0
+    cameraTimer: 0,
+    angle: 30, // Default pitch angle for 3D view
+    rotation: 45 // Default yaw rotation for 3D view
 };
 gameContext.gameState = {
     paused: false,
@@ -67,6 +73,9 @@ gameContext.gameState = {
     fpvMode: false,
     aimingGrenade: false
 };
+
+// Initialize the WebGL renderer
+gameContext.renderer = initWebGLRenderer(gameContext.canvas);
 
 // Initialize the enhanced journaling system
 import { initializeRecordingSystem } from './core/recordingUtils.js';
@@ -97,7 +106,12 @@ if (gameContext.JOURNALING_MODE !== 'FULL') {
 
 // Initialize SelectionManager
 import SelectionManager from './ui/selectionManager.js';
+import { WindowManager } from './ui/borderLayout.js'; // Import WindowManager
 gameContext.selectionManager = new SelectionManager(gameContext); // Pass gameContext to manager
+
+// Initialize WindowManager and allow drawing
+gameContext.windowManager = new WindowManager();
+gameContext.allowWindowDrawing = true;
 
 // Initialize input handling and start the game
 if (!gameContext.HEADLESS_MODE) {

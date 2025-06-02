@@ -157,3 +157,6 @@ export const EFFECT_TEXTURES = {
     explosion: "textures/explosion.png",
     smoke: "textures/smoke.png"
 };
+
+// Terrain constants
+export const SEA_LEVEL = 0.0;

@@ -1,1 +1,6 @@
 .aider*
+path
+node_modules
+.aider.*
+.claude/
+.idea/

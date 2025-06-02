@@ -1,0 +1,19 @@
+{
+  "bundler": "closure-compiler",
+  "buildTime": 2650,
+  "assets": [
+    {
+      "name": "closure-bundle.js",
+      "size": 30271,
+      "sizeKB": "29.56"
+    }
+  ],
+  "totalSize": 30271,
+  "warnings": 0,
+  "errors": 0,
+  "warningDetails": [],
+  "errorDetails": [],
+  "compilationLevel": "SIMPLE_OPTIMIZATIONS",
+  "languageIn": "ECMASCRIPT_2020",
+  "languageOut": "ECMASCRIPT5_STRICT"
+}

@@ -11,7 +11,7 @@ import { GrenadeProjectile } from './projectile.js';
 import { findLandPosition, findWaterPosition } from './terrain.js';
 import { generateTerrain } from './terrainManager.js';
 import { makeStrategicDecisions, coordinateAttacks } from '../ai/strategicAI.js';
-import { render } from '../rendering/renderer.js'; // Import render function
+// import { render } from '../rendering/renderer.js'; // Old 2D renderer
 import battleJournal from '../ai/battleJournal.js';
 
 export function formatTime(seconds) {
@@ -516,9 +516,12 @@ export function gameLoop(timestamp, gameContext) {
     // Only render if not in headless mode
     if (!gameContext.HEADLESS_MODE) {
         try {
-            render(gameContext);
+            // Update the WebGL camera with the latest game camera data
+            gameContext.renderer.updateCamera(gameContext.camera);
+            // Call the WebGL render method
+            gameContext.renderer.render(gameContext);
         } catch (e) {
-            console.error("Error during rendering:", e);
+            console.error("Error during WebGL rendering:", e);
             // Optionally, set winner or pause game for critical rendering errors
             // gameContext.gameState.winner = "RENDER_ERROR";
         }

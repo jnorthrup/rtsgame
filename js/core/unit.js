@@ -30,7 +30,7 @@ class Unit {
         this.preferredRange = this.type.range * 0.8;
         this.militaryRank = this.determineMilitaryRank();
         this.survivalPriority = this.calculateSurvivalPriority();
-        this.commandAuthority = this.type.tier * 10 + (this.type.support ? 5 : 0);
+        this.commandAuthority = this.type.tier * 10 + (this.type.support ? 5 : 0); // Original command authority
         this.protectionNeeds = [];
         this.lastThreatAssessment = 0;
         this.fleeThreshold = this.maxHp * 0.2;
@@ -52,6 +52,30 @@ class Unit {
         this.currentWaypointIndex = 0;
         this.pathRequestCooldown = 0;
         this.PATH_REQUEST_INTERVAL = 30; // Request path every ~0.5s at 60fps
+
+        // Enhanced authority properties
+        this.baseAuthority = this.commandAuthority; // Use original for base
+        this.healthAuthorityModifier = 0;
+        this.veterancyAuthorityModifier = 0;
+        this.contextAuthorityModifier = 0;
+        this.effectiveAuthority = this.baseAuthority;
+
+        // Veterancy tracking
+        this.combatExperience = 0;        // Successful attacks landed
+        this.survivalTime = 0;            // Time alive in combat zones
+        this.commandExperience = 0;       // Subordinates successfully commanded
+        this.killCount = 0;               // Enemy units destroyed
+        this.damageDelt = 0;              // Total damage inflicted
+        this.lastPromotionTime = 0;       // Prevents spam promotions
+        this.veterancyLevel = 'GREEN';
+
+        // Health-based command fitness
+        this.commandFitness = 'FULL_COMMAND';
+        this.lastAuthorityUpdate = 0;
+        this.commandSuccesses = 0;
+        this.commandFailures = 0;
+        this.currentCommander = null; // Track who this unit is following
+        this.lastCommandChange = 0; // Timestamp of last command transfer
     }
 
     getCurrentSpeed(gameContext) {
@@ -79,7 +103,7 @@ class Unit {
     }
 
     update(gameContext) {
-        const { units, buildings } = gameContext; // Get local references for convenience
+        const { units, buildings, deltaTime } = gameContext; // Get local references for convenience
 
         // Shield regeneration
         if (this.shields < this.maxShields) {

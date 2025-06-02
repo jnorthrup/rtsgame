@@ -519,6 +519,12 @@ export class BattleJournal {
 
     saveBattleToStorage() {
         try {
+            // Check if localStorage is available (not available in headless environments)
+            if (typeof localStorage === 'undefined') {
+                console.log('📹 Battle Journal: localStorage not available in headless environment, skipping save');
+                return;
+            }
+            
             const battleData = JSON.stringify(this.currentBattle);
             const battleKey = `battle_${this.currentBattle.id}`;
             
@@ -543,7 +549,9 @@ export class BattleJournal {
                 this.cleanupOldBattles();
                 // Try again after cleanup
                 try {
-                    localStorage.setItem(`battle_${this.currentBattle.id}`, JSON.stringify(this.currentBattle));
+                    if (typeof localStorage !== 'undefined') {
+                        localStorage.setItem(`battle_${this.currentBattle.id}`, JSON.stringify(this.currentBattle));
+                    }
                 } catch (retryError) {
                     console.error('📹 Battle Journal: Failed to save even after cleanup:', retryError);
                 }
@@ -572,6 +580,11 @@ export class BattleJournal {
 
     updateBattleIndex(battleId) {
         try {
+            if (typeof localStorage === 'undefined') {
+                console.log('📹 Battle Journal: localStorage not available, skipping index update');
+                return;
+            }
+            
             const indexKey = 'battle_journal_index';
             let index = JSON.parse(localStorage.getItem(indexKey) || '[]');
             
@@ -599,6 +612,9 @@ export class BattleJournal {
 
     getBattleIndex() {
         try {
+            if (typeof localStorage === 'undefined') {
+                return [];
+            }
             return JSON.parse(localStorage.getItem('battle_journal_index') || '[]');
         } catch (error) {
             console.error('📹 Battle Journal: Failed to read index:', error);
@@ -608,6 +624,9 @@ export class BattleJournal {
 
     loadBattle(battleId) {
         try {
+            if (typeof localStorage === 'undefined') {
+                return null;
+            }
             const battleData = localStorage.getItem(`battle_${battleId}`);
             return battleData ? JSON.parse(battleData) : null;
         } catch (error) {
@@ -618,6 +637,11 @@ export class BattleJournal {
 
     deleteBattle(battleId) {
         try {
+            if (typeof localStorage === 'undefined') {
+                console.log('📹 Battle Journal: localStorage not available, skipping deletion');
+                return false;
+            }
+            
             localStorage.removeItem(`battle_${battleId}`);
             
             // Update index
@@ -649,6 +673,10 @@ export class BattleJournal {
 
     checkStorageUsage() {
         try {
+            if (typeof localStorage === 'undefined') {
+                return;
+            }
+            
             let totalSize = 0;
             for (let key in localStorage) {
                 if (key.startsWith('battle_')) {
