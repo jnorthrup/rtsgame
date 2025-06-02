@@ -61,7 +61,7 @@ function placeFactoriesAroundCommander(gameContext, commanderPos, team) {
         console.warn(`Could not find ideal spot for Land Factory for ${team}, placing at fallback.`);
         landPos = { x: commanderPos.x + offset, y: commanderPos.y };
     }
-    gameContext.buildings.push(new Building(landPos.x, landPos.y, team, BUILDING_TYPES.landFactory));
+    gameContext.buildings.push(new Building(landPos.x, landPos.y, team, BUILDING_TYPES.landFactory, gameContext));
 
     airPos = findLandPosition(gameContext, commanderPos.x - offset, commanderPos.y - offset, factoryAreaSize);
     if (!airPos) airPos = findLandPosition(gameContext, commanderPos.x + offset, commanderPos.y + offset, factoryAreaSize);
@@ -69,13 +69,13 @@ function placeFactoriesAroundCommander(gameContext, commanderPos, team) {
         console.warn(`Could not find ideal spot for Air Factory for ${team}, placing at fallback.`);
         airPos = { x: commanderPos.x - offset, y: commanderPos.y - offset };
     }
-    gameContext.buildings.push(new Building(airPos.x, airPos.y, team, BUILDING_TYPES.airFactory));
+    gameContext.buildings.push(new Building(airPos.x, airPos.y, team, BUILDING_TYPES.airFactory, gameContext));
 
     navalPos = findWaterPosition(gameContext, commanderPos.x, commanderPos.y + offset * 1.5);
     if (navalPos && navalPos.x !== undefined && navalPos.y !== undefined) {
          const distToCommander = Math.sqrt((navalPos.x - commanderPos.x) ** 2 + (navalPos.y - commanderPos.y) ** 2);
          if (distToCommander < 700) {
-            gameContext.buildings.push(new Building(navalPos.x, navalPos.y, team, BUILDING_TYPES.navalFactory));
+            gameContext.buildings.push(new Building(navalPos.x, navalPos.y, team, BUILDING_TYPES.navalFactory, gameContext));
          } else {
             console.log(`Naval factory position for ${team} was too far from commander (${distToCommander.toFixed(0)} units), skipping.`);
          }
@@ -88,7 +88,7 @@ function placeFactoriesAroundCommander(gameContext, commanderPos, team) {
         console.warn(`Could not find ideal spot for Energy Plant for ${team}, placing at fallback.`);
         energyPos1 = { x: commanderPos.x, y: commanderPos.y - offset};
     }
-    gameContext.buildings.push(new Building(energyPos1.x, energyPos1.y, team, BUILDING_TYPES.energyExtractor));
+    gameContext.buildings.push(new Building(energyPos1.x, energyPos1.y, team, BUILDING_TYPES.energyExtractor, gameContext));
 }
 
 export function initGame(gameContext) {
@@ -101,8 +101,8 @@ export function initGame(gameContext) {
     gameContext.gameState.gameTime = 0;
     gameContext.gameState.events = [];
 
-    gameContext.resources.blue = { mass: 1000, energy: 1000, massIncome: 0, energyIncome: 0 };
-    gameContext.resources.red = { mass: 1000, energy: 1000, massIncome: 0, energyIncome: 0 };
+    gameContext.resources.blue = { mass: 100, energy: 150, massIncome: 0, energyIncome: 0 };
+    gameContext.resources.red = { mass: 100, energy: 150, massIncome: 0, energyIncome: 0 };
 
     let blueStart = null;
     let redStart = null;
@@ -111,6 +111,27 @@ export function initGame(gameContext) {
     const COMMANDER_START_AREA_SIZE = 5;
 
     console.log("Initializing game, attempting to generate terrain and find starting positions...");
+    
+    function printTerrainMap(gameContext) {
+        console.log("=== TERRAIN MAP (L=Land, W=Water, M=Mountain) ===");
+        let mapStr = "";
+        for (let y = 0; y < GRID_SIZE; y += 2) { // Show every 2nd row for readability
+            let row = "";
+            for (let x = 0; x < GRID_SIZE; x += 2) { // Show every 2nd column
+                if (gameContext.terrain[x] && gameContext.terrain[x][y] !== undefined) {
+                    const terrain = gameContext.terrain[x][y];
+                    if (terrain === TERRAIN_TYPES.LAND) row += "L";
+                    else if (terrain === TERRAIN_TYPES.WATER) row += "W";
+                    else if (terrain === TERRAIN_TYPES.MOUNTAIN) row += "M";
+                    else row += "?";
+                } else {
+                    row += "?";
+                }
+            }
+            console.log(row);
+        }
+        console.log("=== END TERRAIN MAP ===");
+    }
 
     for (let i = 0; i < MAX_INIT_RETRIES; i++) {
         console.log(`Attempt ${i + 1}/${MAX_INIT_RETRIES} to generate terrain and find start spots for both teams.`);
@@ -120,6 +141,8 @@ export function initGame(gameContext) {
 
         if (blueStart && redStart) {
             console.log(`Successfully found starting positions for both teams after ${i + 1} attempt(s).`);
+            printTerrainMap(gameContext);
+            console.log(`Blue spawn: (${blueStart.x}, ${blueStart.y}), Red spawn: (${redStart.x}, ${redStart.y})`);
             break;
         } else {
             console.warn(`Could not find suitable ${COMMANDER_START_AREA_SIZE}x${COMMANDER_START_AREA_SIZE} starting areas in attempt ${i + 1}. Blue found: ${!!blueStart}, Red found: ${!!redStart}. Regenerating terrain...`);
@@ -267,6 +290,18 @@ export function update(gameContext) {
 
     makeStrategicDecisions(gameContext);
     coordinateAttacks(gameContext);
+
+    // Update introspection windows
+    if (gameContext.introspectionManager) {
+        gameContext.introspectionManager.update(gameContext);
+    }
+
+    // Update command status renderers
+    if (gameContext.commandStatusRenderers) {
+        gameContext.commandStatusRenderers.forEach(renderer => {
+            renderer.update();
+        });
+    }
 
     if (gameContext.gameState.fpvMode && gameContext.gameState.selectedUnit) {
         gameContext.camera.x = gameContext.gameState.selectedUnit.x;
