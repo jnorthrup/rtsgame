@@ -184,7 +184,7 @@ export function render(gameContext) {
     // Call the imported updateUI function directly
     updateUI(gameContext);
 
-    if (gameState.winner) {
+    if (gameState.winner && gameState.winner !== "RECORDING_COMPLETE") { // Only show winner screen if game ended naturally
         ctx.fillStyle = 'rgba(0,0,0,0.8)';
         ctx.fillRect(0, 0, camera.canvasWidth, camera.canvasHeight);
 

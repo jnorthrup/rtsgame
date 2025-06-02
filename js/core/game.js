@@ -6,6 +6,7 @@ import { Unit } from './unit.js';
 import { Building } from './building.js';
 import { Effect } from './effect.js';
 import { Caption } from './caption.js';
+import { GrenadeProjectile } from './projectile.js';
 import { generateTerrain, findLandPosition, findWaterPosition } from './terrain.js';
 import { makeStrategicDecisions, coordinateAttacks } from '../ai/strategicAI.js';
 import { render } from '../rendering/renderer.js'; // Import render function
@@ -30,7 +31,8 @@ export function addEvent(gameContext, type, message, importance = 1) {
     }
 
     const eventLog = document.getElementById('events');
-    if (eventLog) {
+    // Only update DOM if not in HEADLESS_MODE
+    if (eventLog && !gameContext.HEADLESS_MODE) {
         const eventDiv = document.createElement('div');
         eventDiv.className = `event event-${type}`;
         eventDiv.textContent = `[${formatTime(gameContext.gameState.gameTime)}] ${message}`;
@@ -39,7 +41,7 @@ export function addEvent(gameContext, type, message, importance = 1) {
         if (eventLog.children.length > 10) {
             eventLog.removeChild(eventLog.lastChild);
         }
-    } else {
+    } else if (!eventLog && !gameContext.HEADLESS_MODE) {
         console.warn("'events' DOM element not found. Skipping event log update.");
     }
 
@@ -47,6 +49,12 @@ export function addEvent(gameContext, type, message, importance = 1) {
         gameContext.camera.cameraTarget = event.position;
         gameContext.camera.cameraTimer = 180; // 3 seconds
     }
+
+    // NEW: Record game events in the battle journal
+    if (gameContext.battleJournal && gameContext.RECORD_AI_DECISIONS) { // Only record if recording is enabled
+        gameContext.battleJournal.recordEvent(type, message, gameContext.gameState.gameTime);
+    }
+
     return event;
 }
 
@@ -92,11 +100,21 @@ function placeFactoriesAroundCommander(gameContext, commanderPos, team) {
 }
 
 export function initGame(gameContext) {
+    // NEW: Initialize seeded random number generator
+    gameContext.seedRandom.init(gameContext.GAME_SEED);
+    console.log(`Game initialized with seed: ${gameContext.GAME_SEED}`);
+
+    // NEW: Start recording if enabled
+    if (gameContext.RECORD_AI_DECISIONS) {
+        gameContext.battleJournal.startRecording(gameContext.GAME_SEED);
+        console.log(`Battle Journal recording started for ${gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS} seconds.`);
+    }
+
     gameContext.units.length = 0;
     gameContext.buildings.length = 0;
     gameContext.effects.length = 0;
     gameContext.captions.length = 0;
-    gameContext.projectiles.length = 0; // CORRECT PLACEMENT
+    gameContext.projectiles.length = 0;
     gameContext.gameState.winner = null;
     gameContext.gameState.gameTime = 0;
     gameContext.gameState.events = [];
@@ -114,6 +132,7 @@ export function initGame(gameContext) {
     console.log("Initializing game, attempting to generate terrain and find starting positions...");
     
     function printTerrainMap(gameContext) {
+        if (gameContext.HEADLESS_MODE) return; // Skip printing in headless mode
         console.log("=== TERRAIN MAP (L=Land, W=Water, M=Mountain) ===");
         let mapStr = "";
         for (let y = 0; y < GRID_SIZE; y += 2) { // Show every 2nd row for readability
@@ -136,7 +155,7 @@ export function initGame(gameContext) {
 
     for (let i = 0; i < MAX_INIT_RETRIES; i++) {
         console.log(`Attempt ${i + 1}/${MAX_INIT_RETRIES} to generate terrain and find start spots for both teams.`);
-        generateTerrain(gameContext);
+        generateTerrain(gameContext); // This should internally use seedRandom.random() now
         blueStart = findLandPosition(gameContext, WORLD_SIZE * 0.2, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
         redStart = findLandPosition(gameContext, WORLD_SIZE * 0.8, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
 
@@ -191,8 +210,8 @@ export function initGame(gameContext) {
     }
 
     if (UNIT_TYPES.commander) {
-        gameContext.units.push(new Unit(blueStart.x, blueStart.y, 'blue', UNIT_TYPES.commander));
-        gameContext.units.push(new Unit(redStart.x, redStart.y, 'red', UNIT_TYPES.commander));
+        gameContext.units.push(new Unit(blueStart.x, blueStart.y, 'blue', UNIT_TYPES.commander, gameContext)); // Pass gameContext to Unit constructor
+        gameContext.units.push(new Unit(redStart.x, redStart.y, 'red', UNIT_TYPES.commander, gameContext)); // Pass gameContext to Unit constructor
         addEvent(gameContext, 'strategic', 'Commanders deployed!', 3);
     } else {
         console.error("UNIT_TYPES.commander is not defined! Cannot spawn ACUs.");
@@ -208,6 +227,14 @@ export function update(gameContext) {
     if (gameContext.gameState.paused || gameContext.gameState.winner) return;
     gameContext.gameState.gameTime += 1 / 60;
 
+    // NEW: Stop recording if duration reached
+    if (gameContext.RECORD_AI_DECISIONS && gameContext.gameState.gameTime >= gameContext.RECORD_AI_DECISIONS_DURATION_SECONDS) {
+        gameContext.battleJournal.stopRecording();
+        // Set winner to end game loop in main.js
+        gameContext.gameState.winner = "RECORDING_COMPLETE"; 
+        return; // Stop further updates in this frame
+    }
+
     // Get the currently selected unit from the selection manager
     const currentSelectedUnit = gameContext.selectionManager.getSelected();
 
@@ -222,10 +249,10 @@ export function update(gameContext) {
         }
     }
 
-    if (gameContext.camera.autoCamera && !gameContext.camera.cameraTarget && Math.random() < 0.005) {
+    if (gameContext.camera.autoCamera && !gameContext.camera.cameraTarget && gameContext.seedRandom.random() < 0.005) { // Using seeded random
         const targets = [...gameContext.units.filter(u => u.target), ...gameContext.buildings];
         if (targets.length > 0) {
-            const target = targets[Math.floor(Math.random() * targets.length)];
+            const target = targets[Math.floor(gameContext.seedRandom.random() * targets.length)]; // Using seeded random
             gameContext.camera.cameraTarget = { x: target.x, y: target.y };
             gameContext.camera.cameraTimer = 180;
         }
@@ -288,7 +315,7 @@ export function update(gameContext) {
         }
     }
 
-    // Update projectiles - CORRECT PLACEMENT
+    // Update projectiles
     if (gameContext.projectiles) {
         for (let i = gameContext.projectiles.length - 1; i >= 0; i--) {
             const projectile = gameContext.projectiles[i];
@@ -299,8 +326,8 @@ export function update(gameContext) {
         }
     }
 
-    makeStrategicDecisions(gameContext);
-    coordinateAttacks(gameContext);
+    makeStrategicDecisions(gameContext); // This function will need to use seedRandom.random()
+    coordinateAttacks(gameContext); // This function will need to use seedRandom.random()
 
     // Update introspection windows
     if (gameContext.introspectionManager) {
@@ -322,22 +349,40 @@ export function update(gameContext) {
     }
 }
 
-export function gameLoop(timestamp, gameContext, gameRenderer) {
+export function gameLoop(timestamp, gameContext) {
     if (!gameContext.lastFpsTime) gameContext.lastFpsTime = 0;
     if (!gameContext.frameCount) gameContext.frameCount = 0;
 
     gameContext.frameCount++;
     if (timestamp - gameContext.lastFpsTime >= 1000) {
         const fpsDisplay = document.getElementById('fps');
-        if (fpsDisplay) {
+        // Only update DOM if not in HEADLESS_MODE
+        if (fpsDisplay && !gameContext.HEADLESS_MODE) {
             fpsDisplay.textContent = gameContext.frameCount;
         }
         gameContext.frameCount = 0;
         gameContext.lastFpsTime = timestamp;
     }
 
+    // NEW: Check if game should terminate due to recording duration or winner
+    if (gameContext.gameState.winner === "RECORDING_COMPLETE") {
+        return false; // Signal to main loop to stop
+    }
+    if (gameContext.gameState.winner && gameContext.gameState.winner !== "RECORDING_COMPLETE") {
+        return false; // Signal to main loop to stop
+    }
+
+
     update(gameContext);
-    render(gameContext);
+
+    // Only render if not in headless mode
+    if (!gameContext.HEADLESS_MODE) {
+        render(gameContext);
+    } else {
+        // console.log(`Headless update at gameTime: ${gameContext.gameState.gameTime.toFixed(2)}`); // Optional: log progress
+    }
+    
+    return true; // Signal to continue loop
 }
 
 export function performAoeDamage(centerX, centerY, radius, damageAmount, ownerTeam, gameContext) {

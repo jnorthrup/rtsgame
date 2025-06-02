@@ -51,31 +51,34 @@ class Building {
         this.rallyy = buildingY;
     }
 
-    update(units, mainGameGlobals) { // Pass main game globals like resources, captions if needed
+    // Refactored to accept gameContext directly
+    update(gameContext) { 
+        const { units, resources, captions, addEvent, Unit, Caption } = gameContext; // Destructure directly from gameContext
+
         // Resource generation
         if (this.type.resourceGeneration) {
-            // Accessing global 'resources' directly for now
-            mainGameGlobals.resources[this.team][this.type.resourceGeneration.type] += this.type.resourceGeneration.amount;
-            mainGameGlobals.resources[this.team][this.type.resourceGeneration.type + 'Income'] =
+            // Accessing resources from gameContext
+            resources[this.team][this.type.resourceGeneration.type] += this.type.resourceGeneration.amount;
+            resources[this.team][this.type.resourceGeneration.type + 'Income'] =
                 this.type.resourceGeneration.amount * 60; // Per minute display
         }
 
         // Auto-production with resource check
         if (this.type.produces && this.productionQueue.length === 0) {
             const unitTypesToBuild = this.type.produces.filter(unitType => {
-                // Accessing global 'resources'
-                return mainGameGlobals.resources[this.team].mass >= (unitType.cost?.mass || 0) &&
-                       mainGameGlobals.resources[this.team].energy >= (unitType.cost?.energy || 0);
+                // Accessing resources from gameContext
+                return resources[this.team].mass >= (unitType.cost?.mass || 0) &&
+                       resources[this.team].energy >= (unitType.cost?.energy || 0);
             });
 
-            if (unitTypesToBuild.length > 0 && Math.random() < 0.02) { // Simplified condition to add to queue
-                const unitType = unitTypesToBuild[Math.floor(Math.random() * unitTypesToBuild.length)];
+            if (unitTypesToBuild.length > 0 && gameContext.seedRandom.random() < 0.02) { // Use seeded random
+                const unitType = unitTypesToBuild[Math.floor(gameContext.seedRandom.random() * unitTypesToBuild.length)]; // Use seeded random
                 this.productionQueue.push(unitType);
 
                 // Deduct resources
                 if (unitType.cost) {
-                    mainGameGlobals.resources[this.team].mass -= unitType.cost.mass || 0;
-                    mainGameGlobals.resources[this.team].energy -= unitType.cost.energy || 0;
+                    resources[this.team].mass -= unitType.cost.mass || 0;
+                    resources[this.team].energy -= unitType.cost.energy || 0;
                 }
             }
         }
@@ -85,28 +88,28 @@ class Building {
             this.productionProgress++;
 
             // Production caption
-            if (this.captionCooldown <= 0 && Math.random() < 0.01) {
+            if (this.captionCooldown <= 0 && gameContext.seedRandom.random() < 0.01) { // Use seeded random
                 const progress = Math.floor((this.productionProgress / this.productionQueue[0].buildTime) * 100);
-                // Accessing global 'captions' and 'Caption' class
-                mainGameGlobals.captions.push(new mainGameGlobals.Caption(this.x, this.y - this.type.size,
+                // Accessing captions and Caption class from gameContext
+                captions.push(new Caption(this.x, this.y - this.type.size,
                     `Building ${this.productionQueue[0].name} ${progress}%`, '#ff0', 10));
                 this.captionCooldown = 90;
             }
 
             if (this.productionProgress >= this.productionQueue[0].buildTime) {
                 const unitType = this.productionQueue.shift();
-                // Accessing global 'units' and 'Unit' class (Unit class will be imported later)
-                const newUnit = new mainGameGlobals.Unit(this.rallyx, this.rallyy, this.team, unitType);
-                mainGameGlobals.units.push(newUnit);
+                // Accessing units and Unit class from gameContext
+                const newUnit = new Unit(this.rallyx, this.rallyy, this.team, unitType, gameContext); // Pass gameContext to Unit constructor
+                units.push(newUnit);
                 this.productionProgress = 0;
 
                 // Completion caption
-                mainGameGlobals.captions.push(new mainGameGlobals.Caption(this.x, this.y - this.type.size,
+                captions.push(new Caption(this.x, this.y - this.type.size,
                     `${unitType.name} ready!`, '#0f0', 12));
 
                 if (unitType.name === 'Experimental' || unitType.tier === 3) {
-                    // Accessing global 'addEvent'
-                    const event = mainGameGlobals.addEvent('build',
+                    // Accessing addEvent from gameContext
+                    const event = addEvent(gameContext, 'build', // Pass gameContext as first arg
                         `${this.team.toUpperCase()} completed ${unitType.name}!`, 3);
                     event.position = { x: this.x, y: this.y };
                 }

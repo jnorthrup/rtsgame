@@ -6,7 +6,9 @@ import { UNIT_TYPES } from '../config/unitTypes.js';
 import { findLandPosition } from '../core/terrain.js';
 import { Building } from '../core/building.js';
 import { Caption } from '../core/caption.js';
-import { battleJournal } from '../core/battleJournal.js';
+import { battleJournal } from '../core/battleJournal.js'; // This import needs to be updated to take battleJournal from gameContext.
+                                                       // However, battleJournal is now passed via gameContext, so direct import isn't needed.
+                                                       // Leaving as-is for now, assuming recordAIDecision correctly gets it from gameContext.
 
 // AI personality profiles for varied gameplay
 const AI_PERSONALITIES = {
@@ -67,7 +69,8 @@ export function makeStrategicDecisions(gameContext) {
         ai.economicPhase = determineEconomicPhase(teamBuildings, resources, gameTime);
         
         // Record strategic decision for replay
-        recordAIDecision(team, 'STRATEGIC_ANALYSIS', {
+        // Pass gameContext to recordAIDecision
+        recordAIDecision(gameContext, team, 'STRATEGIC_ANALYSIS', { // Pass gameContext
             phase: ai.economicPhase,
             resources: { mass: Math.floor(resources.mass), energy: Math.floor(resources.energy) },
             units: teamUnits.length,
@@ -124,7 +127,8 @@ function executeBootstrapStrategy(team, gameContext, ai) {
         
         if (canAffordBuilding(gameContext.resources[team], buildingType)) {
             buildExtractorNear(gameContext, team, targetResource, buildingType);
-            recordAIDecision(team, 'BUILD_EXTRACTOR', {
+            // Pass gameContext to recordAIDecision
+            recordAIDecision(gameContext, team, 'BUILD_EXTRACTOR', { // Pass gameContext
                 type: buildingType.name,
                 position: { x: targetResource.x, y: targetResource.y },
                 resourcesAfter: gameContext.resources[team]
@@ -145,7 +149,7 @@ function executeExpansionStrategy(team, gameContext, ai) {
     const factories = teamBuildings.filter(b => b.type.produces);
     
     // Rapid economic expansion
-    if (resources.mass > 300 && Math.random() < ai.personality.expansionRate) {
+    if (resources.mass > 300 && gameContext.seedRandom.random() < ai.personality.expansionRate) { // Use seeded random
         expandEconomicBase(gameContext, team, ai);
     }
     
@@ -188,7 +192,7 @@ function executeMilitaryStrategy(team, gameContext, ai) {
     }
     
     // Economic harassment raids
-    if (ai.raidCooldown <= 0 && Math.random() < ai.personality.raidFrequency) {
+    if (ai.raidCooldown <= 0 && gameContext.seedRandom.random() < ai.personality.raidFrequency) { // Use seeded random
         launchEconomicRaid(gameContext, team, ai);
         ai.raidCooldown = 300; // 5 second cooldown
     }
@@ -269,7 +273,8 @@ function coordinateTacticalGroups(gameContext, team, teamUnits, ai) {
         if (target) {
             assignGroupTarget(group, target);
             
-            recordAIDecision(team, 'COORDINATE_ATTACK', {
+            // Pass gameContext to recordAIDecision
+            recordAIDecision(gameContext, team, 'COORDINATE_ATTACK', { // Pass gameContext
                 groupSize: group.units.length,
                 groupRole: group.role,
                 targetType: target.type?.name || 'unknown',
@@ -311,7 +316,8 @@ function executeFormationAttacks(gameContext, team, teamUnits, ai) {
             unit.aggressiveness = 0.9;
         });
         
-        recordAIDecision(team, 'FORMATION_ATTACK', {
+        // Pass gameContext to recordAIDecision
+        recordAIDecision(gameContext, team, 'FORMATION_ATTACK', { // Pass gameContext
             formationSize: formation.length,
             formationType: 'line',
             targetPosition: { x: target.x, y: target.y }
@@ -332,8 +338,8 @@ function executeFlankingManeuvers(gameContext, team, teamUnits, ai) {
         .slice(0, 4);
     
     if (flankingUnits.length >= 3) {
-        // Calculate flanking positions
-        const angle = Math.random() * Math.PI * 2;
+        // Calculate flanking positions using seeded random
+        const angle = gameContext.seedRandom.random() * Math.PI * 2; // Use seeded random
         const flankDistance = 150;
         
         flankingUnits.forEach((unit, i) => {
@@ -346,7 +352,8 @@ function executeFlankingManeuvers(gameContext, team, teamUnits, ai) {
             unit.aggressiveness = 1.0;
         });
         
-        recordAIDecision(team, 'FLANKING_MANEUVER', {
+        // Pass gameContext to recordAIDecision
+        recordAIDecision(gameContext, team, 'FLANKING_MANEUVER', { // Pass gameContext
             flankingUnits: flankingUnits.length,
             targetCommander: enemyCommander.team
         });
@@ -390,15 +397,17 @@ function buildExtractorNear(gameContext, team, resource, buildingType) {
 }
 
 function buildFactoryNear(gameContext, team, commander) {
+    // Use seeded random for position offset
     const pos = findLandPosition(gameContext, 
-        commander.x + (Math.random() - 0.5) * 100,
-        commander.y + (Math.random() - 0.5) * 100, 30);
+        commander.x + (gameContext.seedRandom.random() - 0.5) * 100, // Use seeded random
+        commander.y + (gameContext.seedRandom.random() - 0.5) * 100, 30); // Use seeded random
     
     if (pos) {
         const factory = new Building(pos.x, pos.y, team, BUILDING_TYPES.landFactory, gameContext);
         gameContext.buildings.push(factory);
         
-        recordAIDecision(team, 'BUILD_FACTORY', {
+        // Pass gameContext to recordAIDecision
+        recordAIDecision(gameContext, team, 'BUILD_FACTORY', { // Pass gameContext
             position: { x: pos.x, y: pos.y },
             type: 'landFactory'
         });
@@ -458,7 +467,8 @@ function launchCoordinatedAttack(gameContext, team, ai, enemyBuildings) {
             unit.aggressiveness = 0.95;
         });
         
-        recordAIDecision(team, 'LAUNCH_ATTACK', {
+        // Pass gameContext to recordAIDecision
+        recordAIDecision(gameContext, team, 'LAUNCH_ATTACK', { // Pass gameContext
             attackForceSize: attackForce.length,
             targetType: primaryTarget.type?.name || 'unknown',
             targetPosition: { x: primaryTarget.x, y: primaryTarget.y }
@@ -480,14 +490,16 @@ function launchEconomicRaid(gameContext, team, ai) {
     );
     
     if (raiders.length >= 2 && enemyExtractors.length > 0) {
-        const target = enemyExtractors[Math.floor(Math.random() * enemyExtractors.length)];
+        // Use seeded random for target selection
+        const target = enemyExtractors[Math.floor(gameContext.seedRandom.random() * enemyExtractors.length)]; // Use seeded random
         
         raiders.forEach(unit => {
             unit.patrolTarget = { x: target.x, y: target.y };
             unit.aggressiveness = 0.9;
         });
         
-        recordAIDecision(team, 'ECONOMIC_RAID', {
+        // Pass gameContext to recordAIDecision
+        recordAIDecision(gameContext, team, 'ECONOMIC_RAID', { // Pass gameContext
             raiderCount: raiders.length,
             targetType: target.type.name,
             targetPosition: { x: target.x, y: target.y }
@@ -499,15 +511,17 @@ function buildAdvancedFactory(gameContext, team) {
     const commander = gameContext.units.find(u => u.team === team && u.type === UNIT_TYPES.commander);
     if (!commander) return;
     
+    // Use seeded random for position offset
     const pos = findLandPosition(gameContext,
-        commander.x + (Math.random() - 0.5) * 200,
-        commander.y + (Math.random() - 0.5) * 200, 40);
+        commander.x + (gameContext.seedRandom.random() - 0.5) * 200, // Use seeded random
+        commander.y + (gameContext.seedRandom.random() - 0.5) * 200, 40); // Use seeded random
     
     if (pos) {
         const factory = new Building(pos.x, pos.y, team, BUILDING_TYPES.advancedLandFactory, gameContext);
         gameContext.buildings.push(factory);
         
-        recordAIDecision(team, 'BUILD_ADVANCED', {
+        // Pass gameContext to recordAIDecision
+        recordAIDecision(gameContext, team, 'BUILD_ADVANCED', { // Pass gameContext
             type: 'advancedLandFactory',
             position: { x: pos.x, y: pos.y }
         });
@@ -526,7 +540,8 @@ function launchMassAssault(gameContext, team, ai) {
             unit.aggressiveness = 1.0;
         });
         
-        recordAIDecision(team, 'MASS_ASSAULT', {
+        // Pass gameContext to recordAIDecision
+        recordAIDecision(gameContext, team, 'MASS_ASSAULT', { // Pass gameContext
             assaultForceSize: teamUnits.length,
             targetCommander: enemyCommander.team
         });
@@ -580,7 +595,7 @@ function repositionForOffensive(units, gameContext, team) {
         units.forEach(unit => {
             // Move towards enemy commander area
             const angle = Math.atan2(enemyCommander.y - unit.y, enemyCommander.x - unit.x);
-            const distance = 100 + Math.random() * 50;
+            const distance = 100 + gameContext.seedRandom.random() * 50; // Use seeded random
             
             unit.patrolTarget = {
                 x: enemyCommander.x - Math.cos(angle) * distance,
@@ -598,8 +613,8 @@ function repositionForDefense(units, gameContext, team) {
     if (myCommander) {
         units.forEach((unit, index) => {
             // Defensive perimeter
-            const angle = (index / units.length) * Math.PI * 2;
-            const radius = 80 + Math.random() * 40;
+            const angle = (index / units.length) * Math.PI * 2; // This is deterministic, no random needed
+            const radius = 80 + gameContext.seedRandom.random() * 40; // Use seeded random
             
             unit.patrolTarget = {
                 x: myCommander.x + Math.cos(angle) * radius,
@@ -697,12 +712,13 @@ function calculateFormationPositions(centerX, centerY, unitCount, formation) {
     return positions;
 }
 
-function recordAIDecision(team, decisionType, data) {
-    if (battleJournal.isRecording) {
-        battleJournal.recordInputCommand(decisionType, {
+// Updated to receive gameContext
+function recordAIDecision(gameContext, team, decisionType, data) {
+    if (gameContext.battleJournal && gameContext.battleJournal.isRecording) { // Check if battleJournal exists and is recording
+        gameContext.battleJournal.recordInputCommand(decisionType, { // Use gameContext.battleJournal
             ...data,
             aiTeam: team,
-            timestamp: Date.now()
+            timestamp: gameContext.gameState.gameTime // Use game time for replay consistency
         }, `ai_${team}`);
     }
 }
@@ -712,7 +728,7 @@ export function getAIState() {
     return aiState;
 }
 
-// Reset AI state
+// Reset AI state (This function's random calls are only for AI personalities, not game logic)
 export function resetAIState() {
     Object.keys(aiState).forEach(team => {
         aiState[team].lastMajorDecision = 0;

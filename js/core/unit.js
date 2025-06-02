@@ -5,7 +5,7 @@ import { findPath } from '../pathfinding/astar.js';
 // Effect and Caption constructors will be used via gameContext.Effect and gameContext.Caption
 
 class Unit {
-    constructor(x, y, team, type) {
+    constructor(x, y, team, type, gameContext) { // Added gameContext to constructor
         this.x = x;
         this.y = y;
         this.team = team;
@@ -14,7 +14,7 @@ class Unit {
         this.maxHp = type.maxHp;
         this.target = null;
         this.cooldown = 0;
-        this.angle = Math.random() * Math.PI * 2;
+        this.angle = gameContext.seedRandom.random() * Math.PI * 2; // Use seeded random
         this.vx = 0;
         this.vy = 0;
         this.selected = false;
@@ -24,7 +24,7 @@ class Unit {
         this.shieldRegen = type.shieldRegen || 0;
         this.patrolTarget = null;
         this.lastTargetSwitch = 0;
-        this.aggressiveness = 0.7 + Math.random() * 0.3;
+        this.aggressiveness = 0.7 + gameContext.seedRandom.random() * 0.3; // Use seeded random
         this.tacticalRole = this.determineTacticalRole();
         this.lastFireTime = 0;
         this.preferredRange = this.type.range * 0.8;
@@ -134,15 +134,15 @@ class Unit {
             }
         } else {
             // TARGET ACQUISITION - More stable targeting
-            if (!this.target || this.target.hp <= 0 || (Date.now() - this.lastTargetSwitch > 15000 && Math.random() < 0.05)) {
+            if (!this.target || this.target.hp <= 0 || (Date.now() - this.lastTargetSwitch > 15000 && gameContext.seedRandom.random() < 0.05)) { // Use seeded random
                 this.findTarget(gameContext);
                 this.lastTargetSwitch = Date.now();
                 this.path = null;
             }
-            if (Math.random() < 0.005 && !this.target && !this.patrolTarget) { // Only look for patrol if no current combat target or existing patrol
+            if (gameContext.seedRandom.random() < 0.005 && !this.target && !this.patrolTarget) { // Only look for patrol if no current combat target or existing patrol // Use seeded random
                 // Simplified patrol target selection for brevity
                 if (gameContext.resourceNodes && gameContext.resourceNodes.length > 0) {
-                    const targetNode = gameContext.resourceNodes[Math.floor(Math.random() * gameContext.resourceNodes.length)];
+                    const targetNode = gameContext.resourceNodes[Math.floor(gameContext.seedRandom.random() * gameContext.resourceNodes.length)]; // Use seeded random
                     if (targetNode) {
                         this.patrolTarget = { x: targetNode.x, y: targetNode.y };
                         this.path = null; // New patrol target, clear old path
@@ -172,7 +172,7 @@ class Unit {
 
                 if (needsNewPath && this.pathRequestCooldown <= 0) {
                     const moveType = this.type.movementType || 'land';
-                    console.log(`Unit ${this.type.name} requesting path. MovementType: '${moveType}'`); // ADD THIS LOG (uncommented)
+                    // console.log(`Unit ${this.type.name} requesting path. MovementType: '${moveType}'`); // ADD THIS LOG (uncommented)
                     this.path = findPath(
                         { x: this.x, y: this.y },
                         { x: currentPrimaryDestination.x, y: currentPrimaryDestination.y },
@@ -186,22 +186,22 @@ class Unit {
                         // console.log(`Unit ${this.type.name} (${this.team}) could not find path to ${currentPrimaryDestination.type ? currentPrimaryDestination.type.name : 'point'}.`);
                     } else {
                          if (gameContext.addEvent) gameContext.addEvent(gameContext, 'debug', `Path found for ${this.type.name} with ${this.path.length} waypoints.`, 0);
-                         console.log(`DEBUG: Unit ${this.type.name} new path found. Length: ${this.path.length}. Waypoints: ${JSON.stringify(this.path)}`); // JSON.stringify can be verbose
+                         // console.log(`DEBUG: Unit ${this.type.name} new path found. Length: ${this.path.length}. Waypoints: ${JSON.stringify(this.path)}`); // JSON.stringify can be verbose
                     }
                 }
 
                 // PATH FOLLOWING
                 if (this.path && this.currentWaypointIndex < this.path.length) {
-                    console.log(`DEBUG: Unit ${this.type.name} (${this.team}, ID: ${this.id || 'N/A'}) at (${this.x.toFixed(1)}, ${this.y.toFixed(1)}). Path length: ${this.path.length}. Current WP Index: ${this.currentWaypointIndex}.`);
+                    // console.log(`DEBUG: Unit ${this.type.name} (${this.team}, ID: ${this.id || 'N/A'}) at (${this.x.toFixed(1)}, ${this.y.toFixed(1)}). Path length: ${this.path.length}. Current WP Index: ${this.currentWaypointIndex}.`);
                     const waypoint = this.path[this.currentWaypointIndex];
                     const dx = waypoint.x - this.x;
                     const dy = waypoint.y - this.y;
                     const distanceToWaypoint = Math.sqrt(dx * dx + dy * dy);
                     const WAYPOINT_REACH_THRESHOLD = Math.max(this.type.size || 10, TILE_SIZE * 0.75);
-                    console.log(`DEBUG: Unit ${this.type.name} targeting WP ${this.currentWaypointIndex}: (${waypoint.x.toFixed(1)}, ${waypoint.y.toFixed(1)}). Dist: ${distanceToWaypoint.toFixed(1)}. Threshold: ${WAYPOINT_REACH_THRESHOLD.toFixed(1)}`);
+                    // console.log(`DEBUG: Unit ${this.type.name} targeting WP ${this.currentWaypointIndex}: (${waypoint.x.toFixed(1)}, ${waypoint.y.toFixed(1)}). Dist: ${distanceToWaypoint.toFixed(1)}. Threshold: ${WAYPOINT_REACH_THRESHOLD.toFixed(1)}`);
 
                     if (distanceToWaypoint < WAYPOINT_REACH_THRESHOLD) {
-                        console.log(`DEBUG: Unit ${this.type.name} REACHED WP ${this.currentWaypointIndex}.`);
+                        // console.log(`DEBUG: Unit ${this.type.name} REACHED WP ${this.currentWaypointIndex}.`);
                         this.currentWaypointIndex++;
                         if (this.currentWaypointIndex >= this.path.length) { // Reached end of path
                             this.path = null;
@@ -237,14 +237,14 @@ class Unit {
                      }
                       if (distToPatrol < TILE_SIZE * 0.5) this.patrolTarget = null; // Arrived
                 } else { // NO TARGET, NO PATH (wander)
-                    if (Math.random() < 0.02) { this.angle += (Math.random() - 0.5) * 0.5; }
+                    if (gameContext.seedRandom.random() < 0.02) { this.angle += (gameContext.seedRandom.random() - 0.5) * 0.5; } // Use seeded random
                     const currentSpeed = this.getCurrentSpeed(gameContext);
                     this.vx = Math.cos(this.angle) * currentSpeed * 0.5;
                     this.vy = Math.sin(this.angle) * currentSpeed * 0.5;
                 }
             } else { // NO CURRENT PRIMARY DESTINATION (target or patrolTarget)
                 // Wander logic
-                if (Math.random() < 0.02) { this.angle += (Math.random() - 0.5) * 0.5; }
+                if (gameContext.seedRandom.random() < 0.02) { this.angle += (gameContext.seedRandom.random() - 0.5) * 0.5; } // Use seeded random
                 const currentSpeed = this.getCurrentSpeed(gameContext);
                 this.vx = Math.cos(this.angle) * currentSpeed * 0.5;
                 this.vy = Math.sin(this.angle) * currentSpeed * 0.5;
@@ -261,7 +261,7 @@ class Unit {
         if (this.captionCooldown > 0) this.captionCooldown--;
 
         // showStateCaption might be too spammy with pathfinding debug, consider conditional logging
-        // if (this.captionCooldown <= 0 && Math.random() < 0.01) {
+        // if (this.captionCooldown <= 0 && gameContext.seedRandom.random() < 0.01) { // Use seeded random
         //     this.showStateCaption(gameContext);
         // }
     }
@@ -474,7 +474,7 @@ class Unit {
                     }
                 } else {
                     this.constructionTask.progress += (this.type.buildRate || 1.0);
-                    if (this.captionCooldown <= 0 && Math.random() < 0.05) {
+                    if (this.captionCooldown <= 0 && gameContext.seedRandom.random() < 0.05) { // Use seeded random
                         const progressPercent = Math.floor((this.constructionTask.progress / this.constructionTask.type.buildTime) * 100);
                         captions.push(new CaptionConstructor(this.x, this.y - this.type.size - 10, `Build: ${progressPercent}%`, '#FFF', 8));
                         this.captionCooldown = 30;
@@ -720,8 +720,8 @@ class Unit {
                     pushX = (dx / distance) * overlap * SEPARATION_STRENGTH;
                     pushY = (dy / distance) * overlap * SEPARATION_STRENGTH;
                 } else { // Units are too close or on top, apply a default small push
-                    pushX = (Math.random() - 0.5) * SEPARATION_STRENGTH * overlap; // Small random push
-                    pushY = (Math.random() - 0.5) * SEPARATION_STRENGTH * overlap;
+                    pushX = (gameContext.seedRandom.random() - 0.5) * SEPARATION_STRENGTH * overlap; // Small random push // Use seeded random
+                    pushY = (gameContext.seedRandom.random() - 0.5) * SEPARATION_STRENGTH * overlap; // Use seeded random
                      if (pushX === 0 && pushY === 0) pushX = SEPARATION_STRENGTH * overlap; // Ensure some push if random is zero
                 }
 
@@ -885,7 +885,7 @@ class Unit {
 
         if (captionText) {
             captions.push(new CaptionConstructor(this.x, this.y - this.type.size, captionText, color, 10));
-            this.captionCooldown = 120 + Math.random() * 120;
+            this.captionCooldown = 120 + gameContext.seedRandom.random() * 120; // Use seeded random
         }
     }
 
@@ -908,9 +908,9 @@ class Unit {
         effects.push(new EffectConstructor(this.x, this.y, target.x, target.y, this.type.effectColor));
 
         // Check if target is a unit commander. BUILDING_TYPES.commander is not a valid check here.
-        if (target.type && target.type === UNIT_TYPES.commander && Math.random() < 0.1) {
+        if (target.type && target.type === UNIT_TYPES.commander && gameContext.seedRandom.random() < 0.1) { // Use seeded random
             const event = addEvent(gameContext, 'battle', `${this.team.toUpperCase()} attacking enemy Commander!`, 3, { x: target.x, y: target.y });
-        } else if (Math.random() < 0.01 && target.type && target.type.tier >= 2) {
+        } else if (gameContext.seedRandom.random() < 0.01 && target.type && target.type.tier >= 2) { // Use seeded random
             const event = addEvent(gameContext, 'battle', `Major engagement: ${this.type.name} vs ${target.type.name}`, 2, { x: this.x, y: this.y });
         }
     }
@@ -922,7 +922,7 @@ class Unit {
         // For now, assuming damage passed is direct HP damage.
         this.hp -= damage;
 
-        if (damage > 0 && Math.random() < 0.2) {
+        if (damage > 0 && gameContext.seedRandom.random() < 0.2) { // Use seeded random
             if (this.hp <= 0) { // Check if unit is destroyed
                  // Handled in main update loop
             } else if (this.hp < this.maxHp * 0.3) {
@@ -1099,7 +1099,7 @@ class Unit {
             
             // Formation spacing - spread around leader in tactical positions
             if (leaderDist < 60 && leaderDist > 20) {
-                const spreadAngle = this.angle + (Math.random() - 0.5) * Math.PI / 2;
+                const spreadAngle = this.angle + (gameContext.seedRandom.random() - 0.5) * Math.PI / 2; // Use seeded random
                 const spreadDist = 15;
                 this.x += Math.cos(spreadAngle) * spreadDist;
                 this.y += Math.sin(spreadAngle) * spreadDist;
@@ -1385,8 +1385,9 @@ class Unit {
 
         if (this.stuckFrames > this.STUCK_FRAMES_THRESHOLD && !this.isEscaping) {
             this.isEscaping = true;
+            // Use seeded random for escape angle direction
+            this.escapeAngle = this.angle + (gameContext.seedRandom.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2); // Use seeded random
             this.escapeDuration = this.ESCAPE_MODE_DURATION_FRAMES;
-            this.escapeAngle = this.angle + (Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
         }
     }
 }

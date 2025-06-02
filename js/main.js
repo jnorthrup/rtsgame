@@ -8,7 +8,9 @@ import { Caption } from './core/caption.js';
 import { GrenadeProjectile } from './core/projectile.js'; // Added import
 import { initGame, gameLoop, addEvent as addEventFromGameJs, formatTime as formatTimeFromGameJs, performAoeDamage } from './core/game.js'; // Added performAoeDamage
 import { initInputHandling } from './input/inputHandler.js'; // Import input handling
-import SelectionManager from './ui/selectionManager.js'; // NEW IMPORT
+import SelectionManager from './ui/selectionManager.js';
+import * as seedRandom from './core/seedRandom.js'; // NEW IMPORT for seeded random
+import BattleJournal from './core/battleJournal.js'; // NEW IMPORT for BattleJournal
 
 // --- Canvas and Contexts ---
 const canvas = document.getElementById('gameCanvas');
@@ -42,7 +44,6 @@ const camera = {
 
 const gameState = {
     paused: false,
-    // selectedUnit: null, // MANAGED BY SELECTION_MANAGER NOW - THIS LINE IS NOW REMOVED
     fpvMode: false,
     aimingGrenade: false,
     winner: null,
@@ -65,8 +66,16 @@ const effects = [];
 const captions = [];
 const projectiles = []; // Added projectiles array
 
-// NEW: Initialize SelectionManager
-const selectionManager = new SelectionManager();
+// NEW: Global Configuration Flags for Headless Mode and Recording
+const HEADLESS_MODE = true; // Set to true to run without rendering/input for recording
+const RECORD_AI_DECISIONS = true; // Set to true to enable AI decision recording
+const RECORD_AI_DECISIONS_DURATION_SECONDS = 10; // Duration for AI decision recording in seconds
+
+// NEW: Initialize BattleJournal
+const battleJournal = new BattleJournal();
+
+// NEW: Game Seed for Deterministic Simulation
+const GAME_SEED = 12345; // Fixed seed for reproducible results
 
 // --- Game Context Object ---
 // This object bundles all shared state and functionality to be passed to game modules.
@@ -76,34 +85,37 @@ const gameContext = {
     // Core State
     resources, camera, gameState,
     terrain, resourceNodes,
-    units, buildings, effects, captions, projectiles, // Added projectiles
-    // NEW: Selection Manager
-    selectionManager,
+    units, buildings, effects, captions, projectiles,
+    // Selection Manager
+    selectionManager: new SelectionManager(), // Initialize selection manager here
+    // Battle Journal
+    battleJournal, // NEW: Pass battleJournal to gameContext
+    // Seeded Random
+    seedRandom, // NEW: Pass seedRandom module to gameContext
+
     // Imported Types & Constants (for convenience if needed by functions passed in context)
     UNIT_TYPES, BUILDING_TYPES,
     WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES,
     // Imported Class Constructors
-    Unit, Building, Effect, Caption, GrenadeProjectile, // Added GrenadeProjectile
+    Unit, Building, Effect, Caption, GrenadeProjectile,
     // Utilities & Functions passed into context
-    // addEvent: addEventFromGameJs, // addEvent is now primarily used within game.js by other game logic.
-    // formatTime: formatTimeFromGameJs, // formatTime is imported and used by ui.js directly.
-    // updateUI is now imported and called by renderer.js, no longer needed directly in gameContext for that purpose.
-    // mainGameGlobals for Building.update, this structure is passed within gameContext now
-    // The Building class in building.js expects a mainGameGlobals object as its second param for update.
-    // The update function in game.js now constructs this from gameContext.
-    // So, we provide the necessary components for that here.
     mainGameGlobals: {
         resources: resources,
         captions: captions,
-        Caption: Caption, // Class constructor
+        Caption: Caption,
         units: units,
-        Unit: Unit,       // Class constructor
+        Unit: Unit,
         addEvent: (type, message, importance) => addEventFromGameJs(gameContext, type, message, importance)
     },
     // Make initGame and addEvent available on gameContext for inputHandler and potentially other modules
     initGame: initGame,
     addEvent: addEventFromGameJs,
-    performAoeDamage: performAoeDamage // Added performAoeDamage to gameContext
+    performAoeDamage: performAoeDamage,
+    // NEW: Pass configuration flags
+    HEADLESS_MODE: HEADLESS_MODE,
+    RECORD_AI_DECISIONS: RECORD_AI_DECISIONS,
+    RECORD_AI_DECISIONS_DURATION_SECONDS: RECORD_AI_DECISIONS_DURATION_SECONDS,
+    GAME_SEED: GAME_SEED // NEW: Pass game seed
 };
 
 
@@ -121,8 +133,15 @@ if (UNIT_TYPES.commander) {
 // --- Window Resize (Handled by inputHandler.js via gameContext) ---
 
 // --- Initialize Game & Input Handling ---
-initGame(gameContext); // Call imported initGame with context
-initInputHandling(gameContext); // Initialize input handlers
+// Pass the gameContext to initGame, which will handle seedRandom.init() and battleJournal.startRecording()
+initGame(gameContext);
+
+// Only initialize input handling if not in headless mode
+if (!gameContext.HEADLESS_MODE) {
+    initInputHandling(gameContext);
+} else {
+    console.log("Running in HEADLESS_MODE. Skipping input handling.");
+}
 
 // --- Start Game Loop ---
 let lastTimestamp = 0;
@@ -130,11 +149,23 @@ function mainRequestAnimationFrameLoop(timestamp) {
     if (!lastTimestamp) {
         lastTimestamp = timestamp;
     }
-    // const deltaTime = (timestamp - lastTimestamp) / 1000; // Optional: pass deltaTime to gameLoop in game.js
     lastTimestamp = timestamp;
 
-    gameLoop(timestamp, gameContext); // gameLoop is imported from game.js
-    requestAnimationFrame(mainRequestAnimationFrameLoop);
+    // gameLoop itself will now contain the logic to stop based on duration if in headless mode
+    // It also handles skipping render if HEADLESS_MODE is true
+    const continueLoop = gameLoop(timestamp, gameContext); 
+    
+    if (continueLoop) {
+        requestAnimationFrame(mainRequestAnimationFrameLoop);
+    } else {
+        console.log("Game loop terminated by HEADLESS_MODE duration.");
+        // Optional: Output the battle journal content here if needed
+        if (gameContext.RECORD_AI_DECISIONS) {
+            console.log("Recorded AI Decisions:", JSON.stringify(gameContext.battleJournal.getRecordedData(), null, 2)); // Stringify for readable output
+            // You might want to save this to a file or send it somewhere
+            // For now, it's just logged to console.
+        }
+    }
 }
 
 requestAnimationFrame(mainRequestAnimationFrameLoop);

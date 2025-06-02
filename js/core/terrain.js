@@ -76,7 +76,8 @@ export function generateTerrain(gameContext, retries = 0) {
         for (let y = 0; y < GRID_SIZE; y++) {
             const noise1 = Math.sin(x * 0.05) * Math.cos(y * 0.05);
             const noise2 = Math.sin(x * 0.1 + 100) * Math.cos(y * 0.1 + 100) * 0.5;
-            const noise = noise1 + noise2 + Math.random() * 0.1;
+            // Use seeded random for noise
+            const noise = noise1 + noise2 + gameContext.seedRandom.random() * 0.1; // Use seeded random
 
             if (noise < -0.1) {
                 gameContext.terrain[x][y] = TERRAIN_TYPES.WATER;
@@ -109,9 +110,10 @@ export function generateTerrain(gameContext, retries = 0) {
 
     gameContext.resourceNodes.length = 0;
     for (let i = 0; i < 30; i++) { // Number of resource nodes
-        const x = Math.random() * WORLD_SIZE;
-        const y = Math.random() * WORLD_SIZE;
-        const type = Math.random() < 0.5 ? 'mass' : 'energy';
+        // Use seeded random for resource node placement
+        const x = gameContext.seedRandom.random() * WORLD_SIZE; // Use seeded random
+        const y = gameContext.seedRandom.random() * WORLD_SIZE; // Use seeded random
+        const type = gameContext.seedRandom.random() < 0.5 ? 'mass' : 'energy'; // Use seeded random
         gameContext.resourceNodes.push({
             x: x,
             y: y,
