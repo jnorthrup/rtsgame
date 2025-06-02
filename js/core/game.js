@@ -100,6 +100,7 @@ export function initGame(gameContext) {
     gameContext.gameState.winner = null;
     gameContext.gameState.gameTime = 0;
     gameContext.gameState.events = [];
+    gameContext.selectionManager.clearSelection(); // Clear selection on game init
 
     gameContext.resources.blue = { mass: 100, energy: 150, massIncome: 0, energyIncome: 0 };
     gameContext.resources.red = { mass: 100, energy: 150, massIncome: 0, energyIncome: 0 };
@@ -207,6 +208,9 @@ export function update(gameContext) {
     if (gameContext.gameState.paused || gameContext.gameState.winner) return;
     gameContext.gameState.gameTime += 1 / 60;
 
+    // Get the currently selected unit from the selection manager
+    const currentSelectedUnit = gameContext.selectionManager.getSelected();
+
     if (gameContext.camera.autoCamera && gameContext.camera.cameraTarget && gameContext.camera.cameraTimer > 0) {
         const dx = gameContext.camera.cameraTarget.x - gameContext.camera.x;
         const dy = gameContext.camera.cameraTarget.y - gameContext.camera.y;
@@ -240,22 +244,29 @@ export function update(gameContext) {
                 const event = addEvent(gameContext, 'battle', `${unit.team.toUpperCase()} ${unit.type.name} destroyed!`, 2);
                 event.position = { x: unit.x, y: unit.y };
             }
-            gameContext.units.splice(i, 1);
-            if (unit === gameContext.gameState.selectedUnit) {
-                gameContext.gameState.selectedUnit = null;
-                gameContext.gameState.fpvMode = false;
+            // If the destroyed unit was selected, clear the selection
+            if (unit === currentSelectedUnit) {
+                gameContext.selectionManager.clearSelection(); // Use selection manager
+                gameContext.gameState.fpvMode = false; // Also exit FPV if the selected unit is destroyed
             }
+            gameContext.units.splice(i, 1);
         }
     }
 
     for (let i = gameContext.buildings.length - 1; i >= 0; i--) {
         const building = gameContext.buildings[i];
-        building.update(gameContext.units, gameContext.mainGameGlobals);
+        // Pass the entire gameContext to building.update to access all global components
+        // (including the selectionManager if a building ever needs to interact with selection)
+        building.update(gameContext); 
         if (building.hp <= 0) {
             if (building.type.produces || building.type.resourceGeneration) {
                 gameContext.captions.push(new Caption(building.x, building.y, 'Structure lost!', '#f88', 12));
                 const event = addEvent(gameContext, 'battle', `${building.team.toUpperCase()} ${building.type.name} destroyed!`, 2);
                 event.position = { x: building.x, y: building.y };
+            }
+            // If the destroyed building was selected, clear the selection
+            if (building === currentSelectedUnit) { // Note: currentSelectedUnit could be a building now
+                gameContext.selectionManager.clearSelection();
             }
             gameContext.buildings.splice(i, 1);
         }
@@ -303,9 +314,10 @@ export function update(gameContext) {
         });
     }
 
-    if (gameContext.gameState.fpvMode && gameContext.gameState.selectedUnit) {
-        gameContext.camera.x = gameContext.gameState.selectedUnit.x;
-        gameContext.camera.y = gameContext.gameState.selectedUnit.y;
+    // FPV mode: Use the selected entity from selection manager, ensure it's a unit
+    if (gameContext.gameState.fpvMode && currentSelectedUnit && currentSelectedUnit.type && currentSelectedUnit.type.speed !== undefined) {
+        gameContext.camera.x = currentSelectedUnit.x;
+        gameContext.camera.y = currentSelectedUnit.y;
         gameContext.camera.zoom = 10;
     }
 }
