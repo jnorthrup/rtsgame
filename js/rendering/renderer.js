@@ -174,10 +174,11 @@ export function render(gameContext) {
         caption.draw(ctx, camera);
     }
 
-    // Draw windows on top of everything
-    if (gameContext.windowManager) {
-        gameContext.windowManager.draw(ctx);
-    }
+    // Temporarily disable window drawing to diagnose UI issues
+    // if (gameContext.windowManager) {
+    //     gameContext.windowManager.draw(ctx);
+    // }
+    console.log("Window drawing has been disabled for testing.");
 
     drawMinimap(gameContext);
 
