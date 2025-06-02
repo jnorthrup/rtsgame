@@ -100,7 +100,7 @@ export function render(gameContext) {
         return;
     }
 
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = '#333';  // Dark background to ensure black canvas is addressed
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw terrain
@@ -174,11 +174,13 @@ export function render(gameContext) {
         caption.draw(ctx, camera);
     }
 
-    // Temporarily disable window drawing to diagnose UI issues
-    // if (gameContext.windowManager) {
-    //     gameContext.windowManager.draw(ctx);
-    // }
-    console.log("Window drawing has been disabled for testing.");
+    // Re-enable window drawing with the flag for testing, but only if allowed
+    if (gameContext.windowManager && gameContext.allowWindowDrawing) {
+        gameContext.windowManager.draw(ctx);
+        console.log("Window drawing enabled and executed.");
+    } else {
+        console.log("Window drawing is disabled.");
+    }
 
     drawMinimap(gameContext);
 
@@ -199,3 +201,5 @@ export function render(gameContext) {
         ctx.fillText('Press R to restart', camera.canvasWidth / 2, camera.canvasHeight / 2 + 60);
     }
 }
+
+index.html
