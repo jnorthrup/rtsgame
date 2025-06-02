@@ -377,7 +377,13 @@ export function gameLoop(timestamp, gameContext) {
 
     // Only render if not in headless mode
     if (!gameContext.HEADLESS_MODE) {
-        render(gameContext);
+        try {
+            render(gameContext);
+        } catch (e) {
+            console.error("Error during rendering:", e);
+            // Optionally, set winner or pause game for critical rendering errors
+            // gameContext.gameState.winner = "RENDER_ERROR";
+        }
     } else {
         // console.log(`Headless update at gameTime: ${gameContext.gameState.gameTime.toFixed(2)}`); // Optional: log progress
     }

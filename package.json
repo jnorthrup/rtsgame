@@ -1,0 +1,19 @@
+{
+  "name": "rtsgame-headless",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Headless RTS Game Engine with Strategic Event Telegraph",
+  "main": "headless.js",
+  "scripts": {
+    "headless": "node headless.js",
+    "battle": "node headless.js 600", 
+    "quick": "node headless.js 180",
+    "test-scenarios": "node scenario-tester.js",
+    "test-ai": "node scenario-tester.js",
+    "simulate-battles": "node battle-simulator.js",
+    "analyze-cx": "node battle-simulator.js"
+  },
+  "keywords": ["rts", "headless", "strategy", "simulation"],
+  "author": "Claude Code",
+  "license": "MIT"
+}

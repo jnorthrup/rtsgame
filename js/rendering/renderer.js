@@ -100,6 +100,13 @@ export function render(gameContext) {
         return;
     }
 
+    console.log("Render function called!");
+    console.log(`Canvas dimensions: ${canvas.width}x${canvas.height}`);
+    console.log(`Camera: x=${camera.x}, y=${camera.y}, zoom=${camera.zoom}`);
+    console.log(`Terrain tiles to draw: ${gameContext.terrain ? gameContext.terrain.length : 0}`);
+    console.log(`Units to draw: ${gameContext.units ? gameContext.units.length : 0}`);
+    console.log(`Buildings to draw: ${gameContext.buildings ? gameContext.buildings.length : 0}`);
+
     ctx.fillStyle = '#333';  // Dark background to ensure black canvas is addressed
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -202,4 +209,3 @@ export function render(gameContext) {
     }
 }
 
-index.html

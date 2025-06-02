@@ -1,0 +1,62 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #1a1a2e;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+    padding: 20px;
+    box-sizing: border-box;
+    gap: 20px;
+}
+
+.terrain-display {
+    flex: 3;
+    background-color: #0d0d1a;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.panels-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.panel {
+    background: linear-gradient(145deg, #16213e, #0f3460);
+    border-radius: 10px;
+    padding: 15px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    overflow-y: auto;
+    max-height: 30vh;
+}
+
+.panel h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #4ecca3;
+    color: #4ecca3;
+}
+
+#terrainDetails, #resourcesDetails, #playerDetails {
+    padding: 10px 0;
+}
+
+.terrain-tile {
+    position: absolute;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.water { background-color: #1a5fb4; }
+.shallow { background-color: #41a6f6; }
+.land { background-color: #8bc34a; }
+.hill { background-color: #795548; }
+.starter { background-color: #ff5722; }

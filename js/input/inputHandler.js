@@ -25,9 +25,7 @@ export function initInputHandling(gameContext) {
     gameContext.commandStatusRenderers.set('red', new CommandStatusRenderer('red', gameContext));
 
     // Add a flag to control window creation (e.g., disable by default)
-    if (!gameContext.allowWindowCreation) {
-        gameContext.allowWindowCreation = false; // Set to true when you want to enable it
-    }
+    gameContext.allowWindowCreation = true;  // Enable window creation for UI to function properly
 
     // --- Canvas Event Listeners (Mouse for selection, panning) ---
     if (canvas) {
@@ -271,12 +269,14 @@ export function initInputHandling(gameContext) {
 }
 
 function createSampleWindow(gameContext) {
-    const window = new BorderLayoutContainer(100, 100, 400, 300, {
+    const canvasRect = gameContext.canvas.getBoundingClientRect();  // Get canvas position for relative alignment
+    const adjustedX = canvasRect.left + 100;  // Adjust relative to canvas
+    const adjustedY = canvasRect.top + 100;   // Adjust relative to canvas
+    const window = new BorderLayoutContainer(adjustedX, adjustedY, 400, 300, {
         title: 'Sample Border Layout Window',
         backgroundColor: 'rgba(40, 40, 50, 0.95)',
         borderColor: '#666666'
     });
-
     // Add components to different regions
     window.addComponent(
         new TextComponent('North Panel\nToolbar Area', { 
@@ -329,14 +329,18 @@ function createSampleWindow(gameContext) {
 }
 
 function createUnitInspectorWindow(gameContext) {
-    // Get selected entity from the selection manager
-    const selectedEntity = gameContext.selectionManager.getSelected();
-
-    const window = new BorderLayoutContainer(200, 50, 350, 400, {
-        title: 'Inspector', // Changed title to be more general
+    // Duplicate declaration removed to fix redeclaration error
+    const canvasRect = gameContext.canvas.getBoundingClientRect();  // Get canvas position
+    const adjustedX = canvasRect.left + 200;  // Adjust relative to canvas
+    const adjustedY = canvasRect.top + 50;    // Adjust relative to canvas
+    const window = new BorderLayoutContainer(adjustedX, adjustedY, 350, 400, {
+        title: 'Inspector',
         backgroundColor: 'rgba(30, 40, 50, 0.95)',
         borderColor: '#888888'
-    });
+    }); // Correctly close the BorderLayoutContainer constructor
+
+    // Get selected entity from the selection manager
+    const selectedEntity = gameContext.selectionManager.getSelected();
 
     // Entity selection display
     window.addComponent(
@@ -344,7 +348,7 @@ function createUnitInspectorWindow(gameContext) {
             backgroundColor: 'rgba(50, 60, 70, 0.8)',
             alignment: 'center',
             fontSize: 11
-        }), 
+        }),
         BorderRegion.NORTH
     );
 
@@ -384,21 +388,21 @@ function createUnitInspectorWindow(gameContext) {
     }
 
     window.addComponent(
-        new TextComponent(entityInfo, { 
+        new TextComponent(entityInfo, {
             backgroundColor: 'rgba(40, 50, 60, 0.8)',
             fontSize: 10,
             padding: 10
-        }), 
+        }),
         BorderRegion.CENTER
     );
 
     // Commands (generalized)
     window.addComponent(
-        new TextComponent('Commands\n• Click to select\n• F for FPV mode (if unit selected)\n• G for grenade (if Commander selected)', { 
+        new TextComponent('Commands\n• Click to select\n• F for FPV mode (if unit selected)\n• G for grenade (if Commander selected)', {
             backgroundColor: 'rgba(60, 50, 40, 0.8)',
             fontSize: 9,
             padding: 8
-        }), 
+        }),
         BorderRegion.SOUTH
     );
 
@@ -407,5 +411,3 @@ function createUnitInspectorWindow(gameContext) {
 
     gameContext.windowManager.addWindow(window);
 }
-
-js/rendering/renderer.js
