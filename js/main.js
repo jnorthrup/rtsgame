@@ -104,9 +104,9 @@ const gameContext = {
 // --- Populate commander buildList (needs to be after UNIT_TYPES and BUILDING_TYPES are defined/imported) ---
 if (UNIT_TYPES.commander) {
     UNIT_TYPES.commander.buildList = [
-        BUILDING_TYPES.landFactory,
         BUILDING_TYPES.massExtractor,
-        BUILDING_TYPES.energyExtractor
+        BUILDING_TYPES.energyExtractor,
+        BUILDING_TYPES.landFactory
     ];
 } else {
     console.error("Commander unit type (UNIT_TYPES.commander) not found for buildList population in main.js!");
