@@ -24,6 +24,11 @@ export function initInputHandling(gameContext) {
     gameContext.commandStatusRenderers.set('blue', new CommandStatusRenderer('blue', gameContext));
     gameContext.commandStatusRenderers.set('red', new CommandStatusRenderer('red', gameContext));
 
+    // Add a flag to control window creation (e.g., disable by default)
+    if (!gameContext.allowWindowCreation) {
+        gameContext.allowWindowCreation = false; // Set to true when you want to enable it
+    }
+
     // --- Canvas Event Listeners (Mouse for selection, panning) ---
     if (canvas) {
         canvas.addEventListener('mousedown', (e) => {
@@ -210,12 +215,18 @@ export function initInputHandling(gameContext) {
                 }
                 break;
             case 'w':
-                // Create a sample window with border layout
-                createSampleWindow(gameContext);
+                if (gameContext.allowWindowCreation) {
+                    createSampleWindow(gameContext);
+                } else {
+                    console.log("Window creation is disabled.");
+                }
                 break;
             case 'q':
-                // Create a unit inspector window
-                createUnitInspectorWindow(gameContext); // This function will now get the selected unit from selectionManager
+                if (gameContext.allowWindowCreation) {
+                    createUnitInspectorWindow(gameContext);
+                } else {
+                    console.log("Window creation is disabled.");
+                }
                 break;
             case 'i':
                 // Create introspection window for selected object
@@ -231,7 +242,7 @@ export function initInputHandling(gameContext) {
             case 'h':
                 // Show command hierarchy for blue team
                 const blueRenderer = gameContext.commandStatusRenderers.get('blue');
-                if (blueRenderer && !blueRenderer.isVisible()) {
+                if (blueRenderer && !blueRenderer.isVisible() && gameContext.allowWindowCreation) {
                     const window = blueRenderer.createWindow(50, 50);
                     gameContext.windowManager.addWindow(window);
                 }
@@ -239,7 +250,7 @@ export function initInputHandling(gameContext) {
             case 'j':
                 // Show command hierarchy for red team
                 const redRenderer = gameContext.commandStatusRenderers.get('red');
-                if (redRenderer && !redRenderer.isVisible()) {
+                if (redRenderer && !redRenderer.isVisible() && gameContext.allowWindowCreation) {
                     const window = redRenderer.createWindow(600, 50);
                     gameContext.windowManager.addWindow(window);
                 }
@@ -396,3 +407,5 @@ function createUnitInspectorWindow(gameContext) {
 
     gameContext.windowManager.addWindow(window);
 }
+
+js/rendering/renderer.js
