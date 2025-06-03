@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import webpack from 'webpack'; // Required for HotModuleReplacementPlugin
 import CompressionPlugin from 'compression-webpack-plugin';
+import CopyWebpackPlugin from 'copy-webpack-plugin';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,11 +35,11 @@ export default {
         }
       },
       {
-        test: /\.obj$/,
-        type: 'asset/resource',
-        generator: {
-          filename: 'models/[name][ext]'
-        }
+        // Removed .obj loader rule, as we are now using glTF files
+        // {
+        //   test: /\.obj$/,
+        //   use: ['./obj-loader.js']
+        // }
       }
     ]
   },
@@ -46,12 +47,26 @@ export default {
     new HtmlWebpackPlugin({
       template: './index.html',
       filename: 'index.html',
-      inject: 'body',
-      chunks: ['app']
+      inject: 'body'
+      // chunks: ['app'] // Removed to allow all generated chunks for the entry point
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, 'processed_models/glb_optimized'),
+          to: path.resolve(__dirname, 'dist/models_optimized')
+        },
+        {
+          from: path.resolve(__dirname, 'public/assets/model-manifest.json'),
+          to: path.resolve(__dirname, 'dist/assets/model-manifest.json')
+        },
+        // If there are other assets in public/ (e.g. textures) that need to be copied:
+        // { from: path.resolve(__dirname, 'public/textures'), to: path.resolve(__dirname, 'dist/textures') },
+      ],
     }),
     ...(isProduction ? [] : [new webpack.HotModuleReplacementPlugin()]),
     new CompressionPlugin({
-      test: /\.(js|css|html|obj)$/i,
+      test: /\.(js|css|html|glb|gltf)$/i, // Added glb, gltf, removed obj
       algorithm: 'gzip',
       threshold: 8192,
       minRatio: 0.8,
@@ -63,9 +78,17 @@ export default {
       {
         directory: path.join(__dirname, 'dist'),
       },
-      {
-        directory: path.join(__dirname, 'models'),
-        publicPath: '/models',
+      // {
+      //   directory: path.join(__dirname, 'models'), // Old OBJ models, no longer directly served
+      //   publicPath: '/models',
+      // },
+      { // Serve processed models if needed for direct access (though usually loaded via manifest)
+        directory: path.join(__dirname, 'dist/models_optimized'),
+        publicPath: '/models_optimized',
+      },
+      { // Serve assets like the manifest
+        directory: path.join(__dirname, 'dist/assets'),
+        publicPath: '/assets',
       }
     ],
     compress: true,

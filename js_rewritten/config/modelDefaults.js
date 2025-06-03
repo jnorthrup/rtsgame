@@ -11,7 +11,7 @@ export const UNIT_MODELS = {
     commander: {
         name: "Strategic Commander Unit",
         tier: 3,
-        modelPath: "models/commander.obj",
+        modelPath: "commander",
         scale: 1.5,
         health: 10000,
         speed: 2,
@@ -23,7 +23,7 @@ export const UNIT_MODELS = {
     scout: {
         name: "Light Recon Unit",
         tier: 1,
-        modelPath: "models/scout.obj",
+        modelPath: "scout",
         scale: 0.8,
         health: 200,
         speed: 5,
@@ -34,7 +34,7 @@ export const UNIT_MODELS = {
     tank: {
         name: "Armored Assault Unit",
         tier: 2,
-        modelPath: "models/tank.obj",
+        modelPath: "tank",
         scale: 1.0,
         health: 800,
         speed: 3,
@@ -45,7 +45,7 @@ export const UNIT_MODELS = {
     artillery: {
         name: "Long-Range Support Unit",
         tier: 3,
-        modelPath: "models/artillery.obj",
+        modelPath: "artillery",
         scale: 1.2,
         health: 500,
         speed: 1.5,
@@ -56,7 +56,7 @@ export const UNIT_MODELS = {
     fighter: {
         name: "Aerial Strike Unit",
         tier: 2,
-        modelPath: "models/fighter.obj",
+        modelPath: "fighter",
         scale: 0.9,
         health: 300,
         speed: 6,
@@ -67,7 +67,7 @@ export const UNIT_MODELS = {
     submarine: {
         name: "Naval Stealth Unit",
         tier: 2,
-        modelPath: "models/submarine.obj",
+        modelPath: "submarine",
         scale: 1.1,
         health: 600,
         speed: 4,
@@ -81,7 +81,7 @@ export const UNIT_MODELS = {
 export const BUILDING_MODELS = {
     landFactory: {
         name: "Ground Production Facility",
-        modelPath: "models/landFactory.obj",
+        modelPath: "landFactory",
         scale: 2.0,
         health: 2000,
         size: 100,
@@ -92,7 +92,7 @@ export const BUILDING_MODELS = {
     },
     airFactory: {
         name: "Aerial Production Facility",
-        modelPath: "models/airFactory.obj",
+        modelPath: "airFactory",
         scale: 2.0,
         health: 1800,
         size: 100,
@@ -103,7 +103,7 @@ export const BUILDING_MODELS = {
     },
     navalFactory: {
         name: "Naval Production Facility",
-        modelPath: "models/navalFactory.obj",
+        modelPath: "navalFactory",
         scale: 2.0,
         health: 2000,
         size: 120,
@@ -114,7 +114,7 @@ export const BUILDING_MODELS = {
     },
     energyExtractor: {
         name: "Energy Generation Plant",
-        modelPath: "models/energyExtractor.obj",
+        modelPath: "energyExtractor",
         scale: 1.8,
         health: 1000,
         size: 80,
@@ -125,7 +125,7 @@ export const BUILDING_MODELS = {
     },
     massExtractor: {
         name: "Mass Extraction Site",
-        modelPath: "models/massExtractor.obj",
+        modelPath: "massExtractor",
         scale: 1.8,
         health: 1000,
         size: 80,
@@ -140,7 +140,7 @@ export const BUILDING_MODELS = {
 export const TERRAIN_MODELS = {
     resource: {
         name: "Resource Deposit",
-        modelPath: "models/resource.obj",
+        modelPath: "resource",
         scale: 0.05, // Adjust scale as needed for terrain
         size: 50,
         description: "A valuable resource deposit."

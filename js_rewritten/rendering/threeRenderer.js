@@ -1,13 +1,16 @@
 // js_rewritten/rendering/threeRenderer.js - Simplified and perfected Three.js renderer
 
 import * as THREE from 'three';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { WORLD_SIZE, TILE_SIZE, GRID_SIZE } from '../../js/config/gameConstants.js'; // Added GRID_SIZE
 import { UNIT_MODELS, BUILDING_MODELS } from '../config/modelDefaults.js';
 
 export class ThreeRenderer {
     constructor(canvas) {
         this.canvas = canvas;
+        this.modelManifest = null;
+        this.gltfLoader = new GLTFLoader();
+        this.textureLoader = new THREE.TextureLoader(); // For potential later use with glTF materials if needed
         
         // Scene setup
         this.scene = new THREE.Scene();
@@ -70,7 +73,29 @@ export class ThreeRenderer {
         });
         
         // No initial terrain creation here; it will be created dynamically when data is ready.
-        console.log('ThreeRenderer initialized with simple setup');
+        // Manifest loading is deliberately not awaited in constructor to keep constructor synchronous.
+        // The caller (initThreeRenderer) should handle the promise.
+        this.manifestPromise = this.loadModelManifest();
+        console.log('ThreeRenderer initialized, manifest loading started.');
+    }
+
+    async loadModelManifest() {
+        try {
+            const response = await fetch('assets/model-manifest.json');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch model manifest: ${response.statusText}`);
+            }
+            this.modelManifest = await response.json();
+            // Convert array to object for easier lookup
+            this.modelManifest = this.modelManifest.reduce((acc, model) => {
+                acc[model.id] = model;
+                return acc;
+            }, {});
+            console.log('Model manifest loaded and processed successfully.');
+        } catch (error) {
+            console.error('Error loading model manifest:', error);
+            this.modelManifest = {}; // Ensure it's an object to prevent errors
+        }
     }
     
     // Enhanced terrain generation with proper RTS features
@@ -268,29 +293,81 @@ export class ThreeRenderer {
             return new THREE.Mesh();
         }
         
-        const loader = new OBJLoader();
-        const mesh = new THREE.Group();
+        const mesh = new THREE.Group(); // Use a group to apply transformations and hold the model
+
+        if (!this.modelManifest) {
+            console.error("Model manifest not loaded yet. Cannot create unit mesh.");
+            // Return a placeholder or empty group
+            const placeholderGeometry = new THREE.BoxGeometry(modelConfig.size || TILE_SIZE, modelConfig.size || TILE_SIZE, modelConfig.size || TILE_SIZE);
+            const placeholderMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true }); // Magenta placeholder
+            mesh.add(new THREE.Mesh(placeholderGeometry, placeholderMaterial));
+            this.setMeshPosition(mesh, unit);
+            return mesh;
+        }
+
+        const modelIdentifier = modelConfig.modelPath; // This is now the ID, e.g., "commander"
+        const manifestEntry = this.modelManifest[modelIdentifier];
+
+        if (manifestEntry) {
+            this.gltfLoader.load(
+                manifestEntry.path, // Path from manifest, e.g., "models_optimized/commander.glb"
+                (gltf) => {
+                    const loadedScene = gltf.scene;
+                    loadedScene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            // Apply team color - glTF materials can be complex.
+                            // This is a simple approach; might need refinement based on actual model structure.
+                            if (child.material) {
+                                if (Array.isArray(child.material)) {
+                                    child.material.forEach(m => this.applyTeamColor(m, unit.team));
+                                } else {
+                                    this.applyTeamColor(child.material, unit.team);
+                                }
+                            }
+                        }
+                    });
+                    // Apply scale from modelDefaults.js
+                    loadedScene.scale.set(modelConfig.scale, modelConfig.scale, modelConfig.scale);
+                    mesh.add(loadedScene);
+                },
+                undefined, // onProgress callback (optional)
+                (error) => {
+                    console.error(`Error loading GLTF model ${modelIdentifier} (${manifestEntry.path}):`, error);
+                    const placeholderGeometry = new THREE.BoxGeometry(modelConfig.size || TILE_SIZE, modelConfig.size || TILE_SIZE, modelConfig.size || TILE_SIZE);
+                    const placeholderMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true }); // Red placeholder
+                    mesh.add(new THREE.Mesh(placeholderGeometry, placeholderMaterial));
+                }
+            );
+        } else {
+            console.error(`Model identifier '${modelIdentifier}' not found in manifest.`);
+            const placeholderGeometry = new THREE.BoxGeometry(modelConfig.size || TILE_SIZE, modelConfig.size || TILE_SIZE, modelConfig.size || TILE_SIZE);
+            const placeholderMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true }); // Yellow placeholder
+            mesh.add(new THREE.Mesh(placeholderGeometry, placeholderMaterial));
+        }
         
-        loader.load(
-            modelConfig.modelPath,
-            (object) => {
-                object.traverse((child) => {
-                    if (child.isMesh) {
-                        child.material = new THREE.MeshStandardMaterial({
-                            color: unit.team === 'blue' ? 0x0088FF : 0xFF2200
-                        });
-                        child.castShadow = true;
-                    }
-                });
-                object.scale.set(modelConfig.scale, modelConfig.scale, modelConfig.scale);
-                mesh.add(object);
-            },
-            undefined,
-            (error) => {
-                console.error(`Error loading model ${modelConfig.modelPath}:`, error);
+        this.setMeshPosition(mesh, unit); // Helper function to set position based on terrain
+        mesh.castShadow = true; // The group itself might not cast shadow, but its children will
+        return mesh;
+    }
+
+    applyTeamColor(material, team) {
+        // Ensure material is MeshStandardMaterial or similar that has a 'color' property.
+        if (material.isMeshStandardMaterial || material.isMeshLambertMaterial) {
+            material.color.set(team === 'blue' ? 0x0088FF : 0xFF2200);
+            // Potentially preserve other material properties like maps if they exist
+            // material.needsUpdate = true; // May be needed if materials are shared or cloned
+        } else {
+            // If it's a different material type, you might need specific handling
+            // or create a new MeshStandardMaterial.
+            // For simplicity, we'll try to color it if it has a color property.
+            if (material.color) {
+                 material.color.set(team === 'blue' ? 0x0088FF : 0xFF2200);
             }
-        );
-        
+        }
+    }
+
+    setMeshPosition(mesh, entity) {
         let terrainZ = 0;
         if (this.terrainMesh) {
             const worldX = unit.x - WORLD_SIZE / 2;
@@ -303,17 +380,14 @@ export class ThreeRenderer {
             if (this.terrainMesh.geometry.attributes.position.array[vertexIndex + 2] !== undefined) {
                 terrainZ = this.terrainMesh.geometry.attributes.position.array[vertexIndex + 2];
             } else {
-                console.warn(`Could not get terrain Z for unit at (${unit.x}, ${unit.y}).`);
+                console.warn(`Could not get terrain Z for entity at (${entity.x}, ${entity.y}).`);
             }
         }
-        
         mesh.position.set(
-            unit.x - WORLD_SIZE / 2,
-            unit.y - WORLD_SIZE / 2,
+            entity.x - WORLD_SIZE / 2,
+            entity.y - WORLD_SIZE / 2,
             terrainZ
         );
-        mesh.castShadow = true;
-        return mesh;
     }
     
     createBuildingMesh(building) {
@@ -323,30 +397,58 @@ export class ThreeRenderer {
             return new THREE.Mesh();
         }
         
-        const loader = new OBJLoader();
-        const mesh = new THREE.Group();
-        
-        loader.load(
-            modelConfig.modelPath,
-            (object) => {
-                object.traverse((child) => {
-                    if (child.isMesh) {
-                        child.material = new THREE.MeshStandardMaterial({
-                            color: building.team === 'blue' ? 0x4488FF : 0xFF4488
-                        });
-                        child.castShadow = true;
-                    }
-                });
-                object.scale.set(modelConfig.scale, modelConfig.scale, modelConfig.scale);
-                mesh.add(object);
-            },
-            undefined,
-            (error) => {
-                console.error(`Error loading model ${modelConfig.modelPath}:`, error);
-            }
-        );
+        const mesh = new THREE.Group(); // Use a group to apply transformations and hold the model
 
-        let terrainZ = 0;
+        if (!this.modelManifest) {
+            console.error("Model manifest not loaded yet. Cannot create building mesh.");
+            const placeholderGeometry = new THREE.BoxGeometry(modelConfig.size || TILE_SIZE * 2, modelConfig.size || TILE_SIZE * 2, modelConfig.size || TILE_SIZE * 2);
+            const placeholderMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true }); // Magenta placeholder
+            mesh.add(new THREE.Mesh(placeholderGeometry, placeholderMaterial));
+            this.setMeshPosition(mesh, building);
+            return mesh;
+        }
+
+        const modelIdentifier = modelConfig.modelPath; // This is now the ID, e.g., "landFactory"
+        const manifestEntry = this.modelManifest[modelIdentifier];
+
+        if (manifestEntry) {
+            this.gltfLoader.load(
+                manifestEntry.path, // Path from manifest
+                (gltf) => {
+                    const loadedScene = gltf.scene;
+                    loadedScene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            // Apply team color or specific building material
+                            if (child.material) {
+                                if (Array.isArray(child.material)) {
+                                    child.material.forEach(m => this.applyTeamColor(m, building.team === 'blue' ? 'blue' : 'red')); // Ensure team string
+                                } else {
+                                    this.applyTeamColor(child.material, building.team === 'blue' ? 'blue' : 'red'); // Ensure team string
+                                }
+                            }
+                        }
+                    });
+                    loadedScene.scale.set(modelConfig.scale, modelConfig.scale, modelConfig.scale);
+                    mesh.add(loadedScene);
+                },
+                undefined, // onProgress
+                (error) => {
+                    console.error(`Error loading GLTF model ${modelIdentifier} (${manifestEntry.path}):`, error);
+                    const placeholderGeometry = new THREE.BoxGeometry(modelConfig.size || TILE_SIZE * 2, modelConfig.size || TILE_SIZE * 2, modelConfig.size || TILE_SIZE * 2);
+                    const placeholderMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true }); // Red placeholder
+                    mesh.add(new THREE.Mesh(placeholderGeometry, placeholderMaterial));
+                }
+            );
+        } else {
+            console.error(`Model identifier '${modelIdentifier}' not found in manifest.`);
+            const placeholderGeometry = new THREE.BoxGeometry(modelConfig.size || TILE_SIZE * 2, modelConfig.size || TILE_SIZE * 2, modelConfig.size || TILE_SIZE * 2);
+            const placeholderMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true }); // Yellow placeholder
+            mesh.add(new THREE.Mesh(placeholderGeometry, placeholderMaterial));
+        }
+
+        this.setMeshPosition(mesh, building); // Helper function to set position
+        mesh.castShadow = true; // The group itself might not cast shadow, but its children will
         if (this.terrainMesh) {
             const worldX = building.x - WORLD_SIZE / 2;
             const worldY = building.y - WORLD_SIZE / 2;
@@ -362,18 +464,14 @@ export class ThreeRenderer {
             if (this.terrainMesh.geometry.attributes.position.array[vertexIndex + 2] !== undefined) {
                 terrainZ = this.terrainMesh.geometry.attributes.position.array[vertexIndex + 2];
             } else {
-                console.warn(`Could not get terrain Z for building at (${building.x}, ${building.y}). Defaulting to 0.`);
+                console.warn(`Could not get terrain Z for entity at (${entity.x}, ${entity.y}). Defaulting to 0.`);
             }
         }
-        
-        mesh.position.set(
-            building.x - WORLD_SIZE / 2,
-            building.y - WORLD_SIZE / 2,
+         mesh.position.set(
+            entity.x - WORLD_SIZE / 2,
+            entity.y - WORLD_SIZE / 2,
             terrainZ
         );
-        mesh.castShadow = true;
-        
-        return mesh;
     }
     
     render(simulation, gameContext) {
@@ -436,6 +534,8 @@ export class ThreeRenderer {
     }
 }
 
-export function initThreeRenderer(canvas) {
-    return new ThreeRenderer(canvas);
+export async function initThreeRenderer(canvas) {
+    const renderer = new ThreeRenderer(canvas);
+    await renderer.manifestPromise; // Ensure manifest is loaded before renderer is considered fully initialized
+    return renderer;
 }
