@@ -56,6 +56,12 @@ const aiState = {
 };
 
 export function makeStrategicDecisions(gameContext) {
+    // Add null checks for units and buildings arrays
+    if (!gameContext.units || !Array.isArray(gameContext.units) ||
+        !gameContext.buildings || !Array.isArray(gameContext.buildings)) {
+        return; // Exit early if arrays are not properly initialized
+    }
+    
     for (const team of ['blue', 'red']) {
         const ai = aiState[team];
         const teamBuildings = gameContext.buildings.filter(b => b.team === team);
@@ -223,6 +229,12 @@ function executeAdvancedStrategy(team, gameContext, ai) {
 }
 
 export function coordinateAttacks(gameContext) {
+    // Add null checks for units and buildings arrays
+    if (!gameContext.units || !Array.isArray(gameContext.units) ||
+        !gameContext.buildings || !Array.isArray(gameContext.buildings)) {
+        return; // Exit early if arrays are not properly initialized
+    }
+    
     for (const team of ['blue', 'red']) {
         const ai = aiState[team];
         const teamUnits = gameContext.units.filter(u => u.team === team && !u.type.support);
@@ -280,7 +292,7 @@ function coordinateTacticalGroups(gameContext, team, teamUnits, ai) {
             });
             
             // Visual feedback
-            gameContext.captions.push(new Caption(
+            gameContext.entityManager.addCaption(new Caption(
                 group.center.x, group.center.y,
                 `${group.role} assault!`, '#ff4', 16
             ));
@@ -356,7 +368,7 @@ function executeFlankingManeuvers(gameContext, team, teamUnits, ai) {
             targetCommander: enemyCommander.team
         });
         
-        gameContext.captions.push(new Caption(
+        gameContext.entityManager.addCaption(new Caption(
             enemyCommander.x, enemyCommander.y,
             `Flanking maneuver!`, '#f44', 14
         ));
@@ -472,7 +484,7 @@ function launchCoordinatedAttack(gameContext, team, ai, enemyBuildings) {
             targetPosition: { x: primaryTarget.x, y: primaryTarget.y }
         });
         
-        gameContext.captions.push(new Caption(
+        gameContext.entityManager.addCaption(new Caption(
             primaryTarget.x, primaryTarget.y,
             `${team.toUpperCase()} ASSAULT!`, '#f00', 18
         ));
@@ -544,7 +556,7 @@ function launchMassAssault(gameContext, team, ai) {
             targetCommander: enemyCommander.team
         });
         
-        gameContext.captions.push(new Caption(
+        gameContext.entityManager.addCaption(new Caption(
             enemyCommander.x, enemyCommander.y,
             `FINAL ASSAULT!`, '#ff0000', 20
         ));

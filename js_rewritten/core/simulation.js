@@ -23,7 +23,7 @@ import { Building } from '../../js/core/building.js'; // Added
 // import { Caption } from '../../js/core/caption.js'; // Captions are created by events and managed by EntityManager
 // import { GrenadeProjectile } from '../../js/core/projectile.js'; // Projectiles are created by units and managed by EntityManager
 import { findLandPosition, findWaterPosition } from '../../js/core/terrain.js'; // Added
-import { generateTerrain } from '../../js/core/terrainManager.js'; // Added
+import { generateTerrain as generateManagedTerrain } from '../../js/core/terrainManager.js'; // Added
 import { makeStrategicDecisions, coordinateAttacks } from '../../js/ai/strategicAI.js'; // Added AI imports
 // import battleJournal from '../../js/ai/battleJournal.js'; // Battle journal integration will be reviewed and potentially handled via gameContext
 
@@ -263,7 +263,7 @@ export class Simulation {
         this.terrain = this.gameContext.terrain;
     }
 
-    init() {
+    async init() {
         // 0. Initialize Seeded RNG. Use the direct reference this.seedRandom.
         if (this.seedRandom && this.gameContext.GAME_SEED) { // Check this.seedRandom
             this.seedRandom.init(this.gameContext.GAME_SEED); // Use this.seedRandom
@@ -320,15 +320,16 @@ export class Simulation {
         // Helper to print terrain map (for debugging, can be removed or made conditional based on HEADLESS_MODE)
         const printTerrainMap = (terrainGrid, isHeadless) => {
             // Use this.terrain which is populated by generateTerrain via this.gameContext.terrain
-            if (isHeadless || !terrainGrid || Object.keys(terrainGrid).length === 0) return; 
+            if (isHeadless || !terrainGrid || Object.keys(terrainGrid).length === 0) return;
             console.log("--- TERRAIN MAP PREVIEW (L=Land, W=Water, M=Mountain) ---");
-            for (let y = 0; y < GRID_SIZE; y += Math.max(1, Math.floor(GRID_SIZE/32)) ) { 
+            for (let y = 0; y < GRID_SIZE; y += Math.max(1, Math.floor(GRID_SIZE/32)) ) {
                 let row = "";
                 for (let x = 0; x < GRID_SIZE; x += Math.max(1, Math.floor(GRID_SIZE/32)) ) {
-                    const tile = terrainGrid[x] && terrainGrid[x][y] !== undefined ? terrainGrid[x][y] : TERRAIN_TYPES.UNKNOWN;
-                    if (tile === TERRAIN_TYPES.LAND) row += "L";
-                    else if (tile === TERRAIN_TYPES.WATER) row += "W";
-                    else if (tile === TERRAIN_TYPES.MOUNTAIN) row += "M";
+                    const tile = terrainGrid[x] && terrainGrid[x][y] !== undefined ? terrainGrid[x][y] : null;
+                    const tileType = tile ? tile.type : TERRAIN_TYPES.UNKNOWN;
+                    if (tileType === TERRAIN_TYPES.LAND) row += "L";
+                    else if (tileType === TERRAIN_TYPES.WATER) row += "W";
+                    else if (tileType === TERRAIN_TYPES.MOUNTAIN) row += "M";
                     else row += "?";
                 }
                 console.log(row);
@@ -336,13 +337,18 @@ export class Simulation {
             console.log("--- END TERRAIN MAP PREVIEW ---");
         };
         
-        // Terrain generation attempts
-        // generateTerrain expects a gameContext containing seedRandom and will populate gameContext.terrain.
-        // Our this.gameContext is passed, and this.terrain refers to the same object.
+        // Terrain generation attempts - use the proper managed terrain generator
         for (let i = 0; i < MAX_INIT_RETRIES; i++) {
             console.log(`Terrain generation attempt ${i + 1}/${MAX_INIT_RETRIES}.`);
-            // generateTerrain populates this.gameContext.terrain, which is also this.terrain
-            this.gameContext.terrain = generateTerrain(this.gameContext, 'perlinNoiseGenerator'); 
+            try {
+                await generateManagedTerrain(this.gameContext, 'perlinNoiseGenerator');
+                // Ensure terrain reference is updated
+                this.terrain = this.gameContext.terrain;
+            } catch (error) {
+                console.warn(`Terrain generation failed on attempt ${i + 1}, falling back to simple terrain:`, error);
+                this.generateFallbackTerrain();
+                this.terrain = this.gameContext.terrain;
+            }
             
             blueStart = findLandPosition(this.gameContext, WORLD_SIZE * 0.2, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
             redStart = findLandPosition(this.gameContext, WORLD_SIZE * 0.8, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
@@ -362,7 +368,11 @@ export class Simulation {
         if (!blueStart) {
             console.log("Focused retries for BLUE commander...");
             for (let i = 0; i < FOCUSED_PLACEMENT_RETRIES; i++) {
-                this.gameContext.terrain = generateTerrain(this.gameContext, 'perlinNoiseGenerator');
+                try {
+                    await generateManagedTerrain(this.gameContext, 'perlinNoiseGenerator');
+                } catch (error) {
+                    this.generateFallbackTerrain();
+                }
                 blueStart = findLandPosition(this.gameContext, WORLD_SIZE * 0.2, WORLD_SIZE * 0.5, COMMANDER_START_AREA_SIZE);
                 if (blueStart) break;
             }
@@ -374,7 +384,11 @@ export class Simulation {
         if (!redStart) {
              console.log("Focused retries for RED commander...");
             for (let i = 0; i < FOCUSED_PLACEMENT_RETRIES; i++) {
-                this.gameContext.terrain = generateTerrain(this.gameContext, 'perlinNoiseGenerator');
+                try {
+                    await generateManagedTerrain(this.gameContext, 'perlinNoiseGenerator');
+                } catch (error) {
+                    this.generateFallbackTerrain();
+                }
                 if (blueStart && !findLandPosition(this.gameContext, blueStart.x, blueStart.y, COMMANDER_START_AREA_SIZE)) {
                      console.warn("Blue start became invalid after terrain regen for Red.");
                 }
@@ -523,6 +537,52 @@ export class Simulation {
 
         this.update();
         return true; // Signal to continue the loop
+    }
+
+
+    generateFallbackTerrain() {
+        console.log("Generating fallback terrain...");
+        
+        // Initialize terrain arrays if not present
+        if (!this.gameContext.terrain) {
+            this.gameContext.terrain = [];
+        }
+        if (!this.gameContext.mobilityMesh) {
+            this.gameContext.mobilityMesh = [];
+        }
+        
+        for (let x = 0; x < GRID_SIZE; x++) {
+            this.gameContext.terrain[x] = [];
+            this.gameContext.mobilityMesh[x] = [];
+            
+            for (let y = 0; y < GRID_SIZE; y++) {
+                // Simple pattern: mostly land with some water
+                let terrainType, elevation;
+                if ((x < 5 || x > GRID_SIZE - 5) && (y < 5 || y > GRID_SIZE - 5)) {
+                    terrainType = TERRAIN_TYPES.WATER;
+                    elevation = -0.2;
+                } else {
+                    terrainType = TERRAIN_TYPES.LAND;
+                    elevation = 0.1;
+                }
+                
+                this.gameContext.terrain[x][y] = {
+                    type: terrainType,
+                    elevation: elevation
+                };
+                
+                // Generate mobility mesh
+                const movementCost = terrainType === TERRAIN_TYPES.WATER ? 999.0 : 1.0;
+                this.gameContext.mobilityMesh[x][y] = {
+                    cost: movementCost,
+                    passable: terrainType !== TERRAIN_TYPES.WATER
+                };
+            }
+        }
+        
+        // Ensure the simulation terrain reference is updated
+        this.terrain = this.gameContext.terrain;
+        console.log("Fallback terrain generated with", Object.keys(this.terrain).length, "columns");
     }
 }
 

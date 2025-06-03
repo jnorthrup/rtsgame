@@ -1,6 +1,7 @@
 // js/ui/minimap_canvas2d.js - Handles 2D Canvas Minimap Rendering
 
-import { TERRAIN_TYPES, UNIT_TYPES, WORLD_SIZE, GRID_SIZE, TILE_SIZE } from '../config/gameConstants.js';
+import { TERRAIN_TYPES, WORLD_SIZE, GRID_SIZE, TILE_SIZE } from '../config/gameConstants.js';
+import { UNIT_TYPES } from '../config/unitTypes.js';
 // BUILDING_TYPES was imported in the old renderer.js for drawMinimap but not used.
 // If any building-specific minimap logic is added later, it might be needed.
 
@@ -23,7 +24,8 @@ export function drawMinimap(minimapRenderContext) {
         for (let x = 0; x < GRID_SIZE; x += 2) { // Optimized to draw larger blocks
             for (let y = 0; y < GRID_SIZE; y += 2) {
                 if (!terrain[x] || terrain[x][y] === undefined) continue;
-                switch (terrain[x][y]) {
+                const terrainType = terrain[x][y].type || terrain[x][y]; // Support both old and new format
+                switch (terrainType) {
                     case TERRAIN_TYPES.WATER:
                         minimapCtx.fillStyle = '#135'; // Dark Blue
                         break;

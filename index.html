@@ -3,30 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bot Match Visualization</title>
-    <link rel="stylesheet" href="style.css">
+    <title>RTS Game - Bot Match Simulation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #000;
+        }
+        
+        /* Full-screen canvas background */
+        #gameCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+            background-color: #000;
+            cursor: grab;
+        }
+        
+        #gameCanvas:active {
+            cursor: grabbing;
+        }
+        
+        /* UI Container */
+        #ui-root {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        /* Make UI elements interactive */
+        #ui-root * {
+            pointer-events: auto;
+        }
+        
+        /* Top-left UI Panel */
+        .top-left-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            min-width: 200px;
+        }
+        
+        .panel-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 5px;
+        }
+        
+        .team-resources {
+            margin-bottom: 10px;
+        }
+        
+        .team-blue {
+            color: #4A90E2;
+        }
+        
+        .team-red {
+            color: #E74C3C;
+        }
+        
+        /* Minimap */
+        .minimap-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 200;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.8);
+        }
+        
+        #minimapCanvas {
+            display: block;
+            border-radius: 2px;
+        }
+        
+        /* Controls */
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 200;
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 14px;
+            background: rgba(0, 123, 255, 0.9);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: rgba(0, 86, 179, 0.9);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        /* Game HUD */
+        .game-hud {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 12px;
+        }
+        
+        /* Loading indicator */
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 300;
+            color: white;
+            font-size: 18px;
+            text-align: center;
+        }
+        
+        /* Hide SVG */
+        #game-svg {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-    <h1>Bot Match Simulation</h1>
+    <!-- Full-screen WebGL Canvas Background -->
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- UI Root for React Components -->
+    <div id="ui-root">
+        <!-- React components will be rendered here with proper z-index -->
+    </div>
+    
+    <!-- Top-left Resource Panel -->
+    <div class="top-left-panel">
+        <div class="panel-title">Resources</div>
+        <div class="team-resources">
+            <div class="team-blue">Blue Team</div>
+            <div>Mass: <span id="blue-mass">0</span> (Income: <span id="blue-mass-income">0</span>/s)</div>
+            <div>Energy: <span id="blue-energy">0</span> (Income: <span id="blue-energy-income">0</span>/s)</div>
+        </div>
+        <div class="team-resources">
+            <div class="team-red">Red Team</div>
+            <div>Mass: <span id="red-mass">0</span> (Income: <span id="red-mass-income">0</span>/s)</div>
+            <div>Energy: <span id="red-energy">0</span> (Income: <span id="red-energy-income">0</span>/s)</div>
+        </div>
+    </div>
+    
+    <!-- Controls -->
     <div class="controls">
-        <label for="renderer-select">Choose Renderer:</label>
-        <select id="renderer-select">
-            <option value="svg">SVG Renderer</option>
-            <option value="canvas2d">Canvas 2D Renderer</option>
-            <option value="webgl2d">WebGL 2D Renderer</option>
-            <option value="webgl3d" selected>WebGL 3D Renderer</option>
-        </select>
         <button id="start-simulation">Start Simulation</button>
     </div>
-    <div id="ui-root"></div> <!-- Root element for React UI -->
-    <div id="simulation-container">
-        <canvas id="game-canvas" width="800" height="600"></canvas>
-        <svg id="game-svg" width="800" height="600" viewBox="0 0 800 600" style="display:none;"></svg>
+    
+    <!-- Minimap -->
+    <div class="minimap-container">
+        <canvas id="minimapCanvas" width="200" height="200"></canvas>
     </div>
-    <div class="zoom-controls">
-        <button id="zoom-in">+</button>
-        <button id="zoom-out">-</button>
+    
+    <!-- Game HUD -->
+    <div class="game-hud">
+        <div>Camera: <span id="camera-pos">0, 0</span> | Zoom: <span id="camera-zoom">1.0</span></div>
+        <div>Controls: WASD to move, Mouse wheel to zoom, Drag to pan</div>
     </div>
-    <script type="module" src="js/app.js"></script> 
+    
+    <!-- Hidden SVG for compatibility -->
+    <svg id="game-svg" width="0" height="0"></svg>
+    
+    <!-- Loading indicator -->
+    <div class="loading" id="loading">
+        Initializing simulation...
+    </div>
+    
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

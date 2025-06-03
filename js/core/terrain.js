@@ -12,7 +12,7 @@ export function isAreaClear(gameContext, gridX, gridY, size, terrainType) {
             const y = gridY + j;
             // Check bounds and terrain type
             // GRID_SIZE is imported directly
-            if (x >= GRID_SIZE || y >= GRID_SIZE || !gameContext.terrain[x] || gameContext.terrain[x][y] === undefined || gameContext.terrain[x][y] !== terrainType) {
+            if (x >= GRID_SIZE || y >= GRID_SIZE || !gameContext.terrain[x] || gameContext.terrain[x][y] === undefined || gameContext.terrain[x][y].type !== terrainType) {
                 return false;
             }
         }
@@ -27,7 +27,7 @@ export function findLandPosition(gameContext, targetX, targetY, minAreaSize = 3)
     // GRID_SIZE, TILE_SIZE, TERRAIN_TYPES are imported directly
     for (let x = 0; x <= GRID_SIZE - minAreaSize; x++) {
         for (let y = 0; y <= GRID_SIZE - minAreaSize; y++) {
-            if (gameContext.terrain[x] && gameContext.terrain[x][y] === TERRAIN_TYPES.LAND) {
+            if (gameContext.terrain[x] && gameContext.terrain[x][y] && gameContext.terrain[x][y].type === TERRAIN_TYPES.LAND) {
                 // isAreaClear is now local to this module
                 if (isAreaClear(gameContext, x, y, minAreaSize, TERRAIN_TYPES.LAND)) {
                     const areaCenterX = (x + minAreaSize / 2) * TILE_SIZE;
@@ -54,7 +54,7 @@ export function findWaterPosition(gameContext, targetX, targetY) {
     // GRID_SIZE, TILE_SIZE, TERRAIN_TYPES are imported directly
     for (let x = 0; x < GRID_SIZE; x++) {
         for (let y = 0; y < GRID_SIZE; y++) {
-            if (gameContext.terrain[x] && gameContext.terrain[x][y] === TERRAIN_TYPES.WATER) {
+            if (gameContext.terrain[x] && gameContext.terrain[x][y] && gameContext.terrain[x][y].type === TERRAIN_TYPES.WATER) {
                 const worldX = x * TILE_SIZE + TILE_SIZE / 2;
                 const worldY = y * TILE_SIZE + TILE_SIZE / 2;
                 const dist = Math.sqrt((worldX - targetX) ** 2 + (worldY - targetY) ** 2);

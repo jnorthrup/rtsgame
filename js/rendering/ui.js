@@ -10,13 +10,18 @@ import { UNIT_TYPES } from '../config/unitTypes.js';
 // formatTime is imported from game.js, which requires gameContext.
 // However, updateUI itself will receive gameContext.
 // formatTime itself doesn't need gameContext, only the value to format.
-import { formatTime } from '../js_rewritten/core/simulation.js'; // Updated import path
+import { formatTime } from '../../js_rewritten/core/simulation.js'; // Updated import path
 
 export function updateUI(gameContext) {
     const { units, buildings, resources, gameState, camera, UNIT_TYPES: gameContextUnitTypes } = gameContext;
     // Use gameContextUnitTypes if UNIT_TYPES from direct import causes issues with context,
     // but direct import is cleaner if UNIT_TYPES is static config.
     // For now, using imported UNIT_TYPES.
+
+    // Add null checks for units and buildings arrays
+    if (!units || !Array.isArray(units) || !buildings || !Array.isArray(buildings)) {
+        return; // Exit early if arrays are not properly initialized
+    }
 
     // Count units
     const blueUnits = units.filter(u => u.team === 'blue').length;

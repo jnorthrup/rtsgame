@@ -145,6 +145,12 @@ class Unit {
     defaultMovementAndTargeting(simulation, deltaTime) { // Renamed gameContext, added deltaTime
         const { entityManager, gameState, seedRandom } = simulation;
         const { units, buildings } = entityManager;
+        
+        // Add null checks for units and buildings arrays
+        if (!units || !Array.isArray(units) || !buildings || !Array.isArray(buildings)) {
+            return;
+        }
+        
         const { resourceNodes } = simulation.gameContext; // Assuming resourceNodes is on the original gameContext object
 
         if (this.isEscaping) {
@@ -318,6 +324,9 @@ class Unit {
                 let buildingToBuildType = null;
                 const teamResources = resources[this.team];
                 
+                // Add null checks for buildings array
+                if (!buildings || !Array.isArray(buildings)) return;
+                
                 const teamExtractors = buildings.filter(b => b.team === this.team && (b.type.name === 'Mass Extractor' || b.type.name === 'Energy Plant')).length;
                 const teamFactories = buildings.filter(b => b.team === this.team && b.type.produces && b.type.produces.length > 0).length;
                 
@@ -401,7 +410,45 @@ class Unit {
     findTarget(simulation) { // Renamed gameContext
         const { entityManager } = simulation;
         const { units, buildings } = entityManager;
-        // ... (rest of findTarget logic is mostly internal or uses this.getDistance) ...
+        
+        // Add null checks for units and buildings arrays
+        if (!units || !Array.isArray(units) || !buildings || !Array.isArray(buildings)) {
+            return;
+        }
+        
+        let closestTarget = null;
+        let closestDistance = Infinity;
+        
+        // Look for enemy units first
+        const enemyUnits = units.filter(u => u.team !== this.team && u.hp > 0);
+        for (const unit of enemyUnits) {
+            const distance = this.getDistance(unit);
+            if (distance <= this.type.range && distance < closestDistance) {
+                closestTarget = unit;
+                closestDistance = distance;
+            }
+        }
+        
+        // If no units in range, look for enemy buildings
+        if (!closestTarget) {
+            const enemyBuildings = buildings.filter(b => b.team !== this.team && b.hp > 0);
+            for (const building of enemyBuildings) {
+                const distance = this.getDistance(building);
+                if (distance <= this.type.range && distance < closestDistance) {
+                    closestTarget = building;
+                    closestDistance = distance;
+                }
+            }
+        }
+        
+        this.target = closestTarget;
+    }
+
+    getDistance(target) {
+        if (!target) return Infinity;
+        const dx = target.x - this.x;
+        const dy = target.y - this.y;
+        return Math.sqrt(dx * dx + dy * dy);
     }
 
     showStateCaption(simulation) { // Renamed gameContext
@@ -481,8 +528,65 @@ class Unit {
     }
 
     updateTacticalBehavior(simulation) { /* Renamed gameContext */ this.executeAgglomeration(simulation); this.executeGroupMovement(simulation); this.executeUnitInteractions(simulation); this.executeRepositioning(simulation); }
-    executeAgglomeration(simulation) { /* Renamed gameContext */ const units = simulation.entityManager.units; /* ... */ if (!this.target && !this.isEscaping && distToCenter > 100) { /* ... */ const currentSpeed = this.getCurrentSpeed(simulation); /* ... */ } }
-    executeGroupMovement(simulation) { /* Renamed gameContext */ const units = simulation.entityManager.units; /* ... */ if (groupLeader && groupLeader !== this) { /* ... */ const currentSpeed = this.getCurrentSpeed(simulation); /* ... */ if (leaderDist < 60 && leaderDist > 20) { const spreadAngle = this.angle + (simulation.seedRandom.random() - 0.5) * Math.PI / 2; /* ... */ } } }
+    executeAgglomeration(simulation) {
+        const units = simulation.entityManager.units;
+        if (!units || !Array.isArray(units)) return;
+        const teamUnits = units.filter(u => u.team === this.team);
+        
+        if (teamUnits.length <= 1) return;
+        
+        // Calculate center of mass for team units
+        let centerX = 0, centerY = 0;
+        for (const unit of teamUnits) {
+            centerX += unit.x;
+            centerY += unit.y;
+        }
+        centerX /= teamUnits.length;
+        centerY /= teamUnits.length;
+        
+        const distToCenter = Math.sqrt((this.x - centerX) ** 2 + (this.y - centerY) ** 2);
+        
+        if (!this.target && !this.isEscaping && distToCenter > 100) {
+            this.angle = Math.atan2(centerY - this.y, centerX - this.x);
+            const currentSpeed = this.getCurrentSpeed(simulation);
+            this.vx = Math.cos(this.angle) * currentSpeed * 0.3; // Slower movement toward group
+            this.vy = Math.sin(this.angle) * currentSpeed * 0.3;
+        }
+    }
+    executeGroupMovement(simulation) {
+        const units = simulation.entityManager.units;
+        if (!units || !Array.isArray(units)) return;
+        const teamUnits = units.filter(u => u.team === this.team);
+        
+        if (teamUnits.length <= 1) return;
+        
+        // Find group leader (highest authority unit in vicinity)
+        const nearbyUnits = teamUnits.filter(u => {
+            const dist = Math.sqrt((u.x - this.x) ** 2 + (u.y - this.y) ** 2);
+            return dist < 200 && u !== this;
+        });
+        
+        const groupLeader = nearbyUnits.reduce((leader, unit) => {
+            return (!leader || unit.commandAuthority > leader.commandAuthority) ? unit : leader;
+        }, null);
+        
+        if (groupLeader && groupLeader !== this) {
+            const leaderDist = Math.sqrt((groupLeader.x - this.x) ** 2 + (groupLeader.y - this.y) ** 2);
+            const currentSpeed = this.getCurrentSpeed(simulation);
+            
+            if (leaderDist > 80) {
+                // Move towards leader if too far
+                this.angle = Math.atan2(groupLeader.y - this.y, groupLeader.x - this.x);
+                this.vx = Math.cos(this.angle) * currentSpeed * 0.8;
+                this.vy = Math.sin(this.angle) * currentSpeed * 0.8;
+            } else if (leaderDist < 60 && leaderDist > 20) {
+                // Maintain formation spacing
+                const spreadAngle = this.angle + (simulation.seedRandom.random() - 0.5) * Math.PI / 2;
+                this.vx = Math.cos(spreadAngle) * currentSpeed * 0.4;
+                this.vy = Math.sin(spreadAngle) * currentSpeed * 0.4;
+            }
+        }
+    }
     executeUnitInteractions(simulation) { /* Renamed gameContext */ const units = simulation.entityManager.units; /* ... */ }
     executeRepositioning(simulation) { /* Renamed gameContext */ const units = simulation.entityManager.units; /* ... */ }
     updateSurvivalBehaviors(simulation) { /* Renamed gameContext */ if (Date.now() - this.lastThreatAssessment > 2000) { this.assessThreats(simulation); this.lastThreatAssessment = Date.now(); } if (this.hp < this.fleeThreshold && !this.isEscaping) { this.executeTacticalRetreat(simulation); } if (this.type.support && this.shields < this.maxShields * 0.5) { this.seekProtection(simulation); } }
@@ -490,7 +594,29 @@ class Unit {
     executeTacticalRetreat(simulation) { /* Renamed gameContext */ const units = simulation.entityManager.units; /* ... */ }
     seekProtection(simulation) { /* Renamed gameContext */ const units = simulation.entityManager.units; /* ... */ }
     executeCommandHierarchy(simulation) { /* Renamed gameContext */ if (this.militaryRank === 'GENERAL' || this.militaryRank === 'COLONEL') { this.issueStrategicOrders(simulation); } if (this.commandAuthority < 50) { this.followSuperiorOrders(simulation); } }
-    issueStrategicOrders(simulation) { /* Renamed gameContext */ const units = simulation.entityManager.units; /* ... */ for (const sub of subordinates) { if (sub.hp < sub.maxHp * 0.3 && !sub.isEscaping) { sub.protectionNeeds.push('COMMANDER_RETREAT_ORDER'); sub.executeTacticalRetreat(simulation); } } /* ... */ }
+    issueStrategicOrders(simulation) {
+        const units = simulation.entityManager.units;
+        if (!units || !Array.isArray(units)) return;
+        const teamUnits = units.filter(u => u.team === this.team && u !== this);
+        
+        // Find subordinates (units with lower command authority within range)
+        const subordinates = teamUnits.filter(unit => {
+            const distance = Math.sqrt((unit.x - this.x) ** 2 + (unit.y - this.y) ** 2);
+            return distance < 300 && unit.commandAuthority < this.commandAuthority;
+        });
+        
+        for (const sub of subordinates) {
+            if (sub.hp < sub.maxHp * 0.3 && !sub.isEscaping) {
+                sub.protectionNeeds.push('COMMANDER_RETREAT_ORDER');
+                sub.executeTacticalRetreat(simulation);
+            }
+            
+            // Issue target assignments to subordinates without targets
+            if (!sub.target && this.target && sub.commandAuthority < this.commandAuthority * 0.8) {
+                sub.target = this.target;
+            }
+        }
+    }
     followSuperiorOrders(simulation) { /* Renamed gameContext */ const units = simulation.entityManager.units; /* ... */ }
     updateStuckDetection(simulation) { // Renamed gameContext
         const dxMoved = this.x - this.lastPositionForStuckCheck.x;
@@ -512,6 +638,55 @@ class Unit {
             this.escapeAngle = this.angle + (simulation.seedRandom.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
             this.escapeDuration = this.ESCAPE_MODE_DURATION_FRAMES; // This should be time (seconds) not frames
         }
+    }
+
+    determineTacticalRole() {
+        // Determine tactical role based on unit type and characteristics
+        if (this.type.range > 150) {
+            return 'sniper';
+        } else if (this.type.speed > 60) {
+            return 'scout';
+        } else if (this.type.maxHp > 200) {
+            return 'tank';
+        } else if (this.type.support) {
+            return 'support';
+        } else {
+            return 'assault';
+        }
+    }
+
+    determineMilitaryRank() {
+        // Determine military rank based on unit type and tier
+        if (this.type === UNIT_TYPES.commander) {
+            return 'GENERAL';
+        } else if (this.type.tier >= 3) {
+            return 'COLONEL';
+        } else if (this.type.tier >= 2) {
+            return 'MAJOR';
+        } else if (this.type.support) {
+            return 'LIEUTENANT';
+        } else {
+            return 'SERGEANT';
+        }
+    }
+
+    calculateSurvivalPriority() {
+        // Calculate survival priority based on unit importance
+        let priority = this.type.tier * 10;
+        
+        if (this.type === UNIT_TYPES.commander) {
+            priority += 50;
+        }
+        
+        if (this.type.support) {
+            priority += 15;
+        }
+        
+        if (this.type.range > 150) {
+            priority += 10; // Snipers are valuable
+        }
+        
+        return priority;
     }
 }
 

@@ -22,7 +22,7 @@ export default {
   module: {
     rules: [
       {
-        test: /\.js$/,
+        test: /\.(js|jsx)$/,
         exclude: /node_modules/,
         use: {
           loader: 'babel-loader',
@@ -30,12 +30,14 @@ export default {
             presets: [
               ['@babel/preset-env', {
                 targets: {
-                  browsers: ['> 1%', 'last 2 versions', 'not dead'] // More robust browser targets
+                  browsers: ['> 1%', 'last 2 versions', 'not dead']
                 }
-                // modules: false, // Babel preset-env handles this correctly for Webpack
               }],
-              '@babel/preset-react' // Add React preset
-            ]
+              ['@babel/preset-react', {
+                runtime: 'automatic'
+              }]
+            ],
+            plugins: []
           }
         }
       },

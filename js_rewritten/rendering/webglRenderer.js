@@ -24,7 +24,7 @@ export class WebGLRenderer {
         this.buffers = this.initBuffers();
         this.textures = {};
         this.models = {};
-        this.camera = { x: 400, y: 400, zoom: 2.0, canvasWidth: canvas.width, canvasHeight: canvas.height, angle: 0, rotation: 0 };
+        this.camera = { x: 2500, y: 2500, zoom: 1.0, canvasWidth: canvas.width, canvasHeight: canvas.height, angle: 30, rotation: 45 };
         this.initializeModels();
     }
 
@@ -377,7 +377,7 @@ export class WebGLRenderer {
         };
     }
 
-    render(gameContext) {
+    render(simulation, gameContext) {
         if (!this.gl || !this.shaderProgram) {
             console.error('WebGL or shaders not initialized.');
             return;
@@ -391,7 +391,6 @@ export class WebGLRenderer {
         const visibleWorldRight = this.camera.x + this.camera.canvasWidth / this.camera.zoom;
         const visibleWorldTop = this.camera.y - this.camera.canvasHeight / this.camera.zoom;
         const visibleWorldBottom = this.camera.y + this.camera.canvasHeight / this.camera.zoom;
-        
 
         // Set up projection and model-view matrices
         const viewMatrix = this.setupMatrices();
@@ -399,11 +398,25 @@ export class WebGLRenderer {
         // Set light direction for basic lighting
         this.gl.uniform3f(this.uniforms.lightDirection, 0.2, 0.8, -0.5);
 
-        // Render terrain
-        this.renderTerrain(gameContext.terrain, visibleWorldLeft, visibleWorldRight, visibleWorldTop, visibleWorldBottom, viewMatrix);
+        // Get terrain data - check multiple possible locations
+        let terrainData = simulation.terrain || simulation.gameContext?.terrain || gameContext.terrain;
+        
+        if (!terrainData || Object.keys(terrainData).length === 0) {
+            console.warn('No terrain data available for WebGL rendering');
+            return;
+        }
 
-        // Render entities
-        this.renderEntities(gameContext, visibleWorldLeft, visibleWorldRight, visibleWorldTop, visibleWorldBottom, viewMatrix);
+        // Render terrain
+        this.renderTerrain(terrainData, visibleWorldLeft, visibleWorldRight, visibleWorldTop, visibleWorldBottom, viewMatrix);
+
+        // Render entities - create a context object with simulation data
+        const renderContext = {
+            terrain: simulation.terrain,
+            units: simulation.entityManager.units,
+            buildings: simulation.entityManager.buildings,
+            resourceNodes: simulation.gameContext.resourceNodes || []
+        };
+        this.renderEntities(renderContext, visibleWorldLeft, visibleWorldRight, visibleWorldTop, visibleWorldBottom, viewMatrix);
 
         // Render UI elements like minimap and captions if applicable
         // Placeholder for UI rendering logic
@@ -490,6 +503,9 @@ export class WebGLRenderer {
         let colors = [];
         let texCoords = [];
         let normals = [];
+
+        console.log('Rendering terrain with bounds:', {startX, endX, startY, endY});
+        console.log('Terrain data sample:', terrainData[0] ? terrainData[0][0] : 'no data');
 
         // Function to get height at a given grid coordinate, handling boundaries
         const getHeight = (x, y) => {
@@ -599,6 +615,14 @@ export class WebGLRenderer {
                 colors.push(...color, ...color, ...color, ...color);
             }
         }
+
+        console.log('Generated terrain mesh:', {
+            vertexCount: vertices.length / 3,
+            indexCount: indices.length,
+            triangleCount: indices.length / 3,
+            sampleVertices: vertices.slice(0, 9),
+            sampleIndices: indices.slice(0, 9)
+        });
 
         // Bind and upload data to buffers
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.terrain.vertices);
@@ -746,7 +770,8 @@ export class WebGLRenderer {
                     this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, modelViewMatrix);
                     
                     const normalMatrixRender = mat4.create(); // Renamed to avoid conflict with 'normalMatrix' in parent scope
-                    mat4.normalFromMat4(normalMatrixRender, modelViewMatrix);
+                    mat4.invert(normalMatrixRender, modelViewMatrix);
+                    mat4.transpose(normalMatrixRender, normalMatrixRender);
                     this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, normalMatrixRender);
 
                     this.gl.drawElements(this.gl.TRIANGLES, geometry.indices.length, this.gl.UNSIGNED_SHORT, 0);
@@ -757,7 +782,7 @@ export class WebGLRenderer {
 
     // normalizeVector removed, use vec3.normalize from gl-matrix
 
-    renderEntities(gameContext, left, right, top, bottom, viewMatrix) {
+    renderEntities(renderContext, left, right, top, bottom, viewMatrix) {
         // Helper function for visibility check - make it much more permissive for debugging
         const isVisible = (obj, modelSize) => {
             const effectiveSize = modelSize || 50; // Use modelSize if available, else default
@@ -811,7 +836,7 @@ export class WebGLRenderer {
             this.gl.uniform1i(this.uniforms.useVertexColor, 0); // Use uniform color for entities
 
             // Render instances of this unit type
-            gameContext.units.forEach(unit => {
+            renderContext.units.forEach(unit => {
                 let unitModelKey = Object.keys(UNIT_MODELS).find(key => UNIT_MODELS[key].name === unit.type.name);
                 if (!unitModelKey) unitModelKey = 'scout'; // Default fallback
                 
@@ -832,7 +857,7 @@ export class WebGLRenderer {
 
                 // Scale factor for units
                 const unitScale = modelInfo.scale * 0.1; // Make units visible
-                const posZ = gameContext.terrain[unit.x][unit.y].elevation * 20; // Align unit Z to terrain height
+                const posZ = renderContext.terrain[unit.x][unit.y].elevation * 20; // Align unit Z to terrain height
 
                 // Translation matrix for the unit's world position
                 const translationMatrix = [
@@ -865,7 +890,8 @@ export class WebGLRenderer {
                 this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, modelViewMatrix);
                 
                 const normalMatrixRender = mat4.create();
-                mat4.normalFromMat4(normalMatrixRender, modelViewMatrix);
+                mat4.invert(normalMatrixRender, modelViewMatrix);
+                mat4.transpose(normalMatrixRender, normalMatrixRender);
                 this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, normalMatrixRender);
 
                 this.gl.drawElements(this.gl.TRIANGLES, geometry.indices.length, this.gl.UNSIGNED_SHORT, 0);
@@ -910,7 +936,7 @@ export class WebGLRenderer {
             this.gl.uniform1i(this.uniforms.useVertexColor, 0); // Use uniform color for buildings
 
             // Render instances of this building type
-            gameContext.buildings.forEach(building => {
+            renderContext.buildings.forEach(building => {
                 let buildingModelKey = Object.keys(BUILDING_MODELS).find(key => BUILDING_MODELS[key].name === building.type.name);
                 if (!buildingModelKey) buildingModelKey = 'landFactory'; // Default fallback
                 if (buildingModelKey !== modelKey) return;
@@ -923,7 +949,7 @@ export class WebGLRenderer {
 
                 // Scale factor for buildings
                 const buildingScale = modelInfo.scale * 0.1; // Make buildings larger
-                const posZ = gameContext.terrain[building.x][building.y].elevation * 20; // Align building Z to terrain height
+                const posZ = renderContext.terrain[building.x][building.y].elevation * 20; // Align building Z to terrain height
 
                 // Translation matrix for the building's world position
                 const translationMatrix = [
@@ -955,7 +981,8 @@ export class WebGLRenderer {
                 this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, modelViewMatrix);
                 
                 const normalMatrixRender = mat4.create();
-                mat4.normalFromMat4(normalMatrixRender, modelViewMatrix);
+                mat4.invert(normalMatrixRender, modelViewMatrix);
+                mat4.transpose(normalMatrixRender, normalMatrixRender);
                 this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, normalMatrixRender);
 
                 this.gl.drawElements(this.gl.TRIANGLES, geometry.indices.length, this.gl.UNSIGNED_SHORT, 0);

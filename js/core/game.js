@@ -303,7 +303,10 @@ export function update(gameContext) {
     }
 
     if (gameContext.camera.autoCamera && !gameContext.camera.cameraTarget && gameContext.seedRandom.random() < 0.005) { // Using seeded random
-        const targets = [...gameContext.units.filter(u => u.target), ...gameContext.buildings];
+        // Add null checks for units and buildings arrays
+        const units = gameContext.units || [];
+        const buildings = gameContext.buildings || [];
+        const targets = [...units.filter(u => u.target), ...buildings];
         if (targets.length > 0) {
             const target = targets[Math.floor(gameContext.seedRandom.random() * targets.length)]; // Using seeded random
             gameContext.camera.cameraTarget = { x: target.x, y: target.y };

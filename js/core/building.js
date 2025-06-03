@@ -55,10 +55,10 @@ class Building {
         this.rallyy = buildingY;
     }
 
-    update(simulation, deltaTime) { 
+    update(simulation, deltaTime) {
         const { entityManager, gameState, seedRandom } = simulation; // Destructure main components from simulation
         const { resources, addEvent } = gameState;
-        const { addUnit, addCaption } = entityManager;
+        const { addUnit } = entityManager;
 
         // Resource generation
         if (this.type.resourceGeneration) {
@@ -91,20 +91,20 @@ class Building {
             // Production progress should accumulate towards buildTime.
             this.productionProgress += deltaTime; 
 
-            if (this.captionCooldown <= 0 && seedRandom && seedRandom.random() < 0.01) { 
+            if (this.captionCooldown <= 0 && seedRandom && seedRandom.random() < 0.01) {
                 const progressPercent = Math.floor((this.productionProgress / this.productionQueue[0].buildTime) * 100);
-                addCaption(new Caption(this.x, this.y - this.type.size,
+                entityManager.addCaption(new Caption(this.x, this.y - this.type.size,
                     `Building ${this.productionQueue[0].name} ${progressPercent}%`, '#ff0', 10));
                 this.captionCooldown = 1.5; // Cooldown in seconds
             }
 
             if (this.productionProgress >= this.productionQueue[0].buildTime) {
                 const unitType = this.productionQueue.shift();
-                const newUnit = new Unit(this.rallyx, this.rallyy, this.team, unitType, simulation); 
+                const newUnit = new Unit(this.rallyx, this.rallyy, this.team, unitType, simulation);
                 addUnit(newUnit);
                 this.productionProgress = 0;
 
-                addCaption(new Caption(this.x, this.y - this.type.size,
+                entityManager.addCaption(new Caption(this.x, this.y - this.type.size,
                    `${unitType.name} ready!`, '#0f0', 12));
 
                 if (unitType.name === 'Experimental' || unitType.tier === 3) {

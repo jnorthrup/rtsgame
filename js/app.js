@@ -6,9 +6,18 @@ if (!window.gameContext) {
     // Get the canvas element and its 2D rendering context, add them to gameContext
     window.gameContext.canvas = gameContext.canvas || document.getElementById('gameCanvas');
     if (window.gameContext.canvas) {
-        // Ensure canvas dimensions match window dimensions for full-screen rendering
-        window.gameContext.canvas.width = window.innerWidth;
-        window.gameContext.canvas.height = window.innerHeight;
+        // Set canvas to full screen
+        const resizeCanvas = () => {
+            window.gameContext.canvas.width = window.innerWidth;
+            window.gameContext.canvas.height = window.innerHeight;
+            if (gameContext.camera) {
+                gameContext.camera.canvasWidth = window.innerWidth;
+                gameContext.camera.canvasHeight = window.innerHeight;
+            }
+        };
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
         console.log("Main game canvas initialized successfully in main.js!");
     } else {
         console.error("Main game canvas element not found!");
@@ -38,9 +47,6 @@ if (!window.gameContext) {
 }
 
 // Import necessary modules
-import React from 'react'; 
-import ReactDOM from 'react-dom/client'; 
-import UiRoot from './ui/components/UiRoot.jsx'; 
 import { InputManager } from './input/inputManager.js'; // NEW: Import InputManager
 
 import { initInputHandling } from './input/inputHandler.js';
@@ -51,7 +57,7 @@ import { SIMULATION_CONFIG } from './config/simulationConfig.js';
 import battleJournal from './ai/battleJournal.js'; // Import battleJournal
 import { Effect } from './core/effect.js'; // Import Effect class
 import { Caption } from './core/caption.js'; // Import Caption class
-import { initRenderer as initWebGLRenderer } from './js_rewritten/rendering/webglRenderer.js'; // Import WebGL renderer
+import { initRenderer as initWebGLRenderer } from '../js_rewritten/rendering/webglRenderer.js'; // Import WebGL renderer
 import { drawMinimap } from './ui/minimap_canvas2d.js'; // NEW: Import drawMinimap
 import { updateUI } from './rendering/ui.js'; // NEW: Import updateUI
 
@@ -82,12 +88,12 @@ const KEYBOARD_MOVE_SPEED = 1500; // Adjusted for world units per second (approx
 const MODIFIER_SPEED_MULTIPLIER = 3;
 
 gameContext.camera = {
-    x: SIMULATION_CONFIG.CAMERA_START_X || 0,
-    y: SIMULATION_CONFIG.CAMERA_START_Y || 0,
-    zoom: SIMULATION_CONFIG.CAMERA_START_ZOOM || 1.0,
-    targetX: SIMULATION_CONFIG.CAMERA_START_X || 0, // From main_simulation.js
-    targetY: SIMULATION_CONFIG.CAMERA_START_Y || 0, // From main_simulation.js
-    targetZoom: SIMULATION_CONFIG.CAMERA_START_ZOOM || 1.0, // From main_simulation.js
+    x: SIMULATION_CONFIG.CAMERA_START_X || 2500, // Center of 5000x5000 world
+    y: SIMULATION_CONFIG.CAMERA_START_Y || 2500, // Center of 5000x5000 world
+    zoom: SIMULATION_CONFIG.CAMERA_START_ZOOM || 0.5, // Zoom out to see more terrain
+    targetX: SIMULATION_CONFIG.CAMERA_START_X || 2500, // From main_simulation.js
+    targetY: SIMULATION_CONFIG.CAMERA_START_Y || 2500, // From main_simulation.js
+    targetZoom: SIMULATION_CONFIG.CAMERA_START_ZOOM || 0.5, // From main_simulation.js
     velocityX: 0, // From main_simulation.js
     velocityY: 0, // From main_simulation.js
     velocityZoom: 0, // From main_simulation.js
@@ -309,6 +315,7 @@ function handleMouseUp(e) {
 
 
 // Initialize input handling and start the game
+(async () => {
 if (!gameContext.HEADLESS_MODE) {
     // initInputHandling(gameContext); // Old input handling - review if it conflicts or can be merged/removed
                                    // For now, new handlers will be added.
@@ -353,7 +360,7 @@ if (!gameContext.HEADLESS_MODE) {
     };
 
     const simulation = new Simulation(simulationCoreContext);
-    simulation.init(); // Initialize simulation state, terrain, entities
+    await simulation.init(); // Initialize simulation state, terrain, entities
 
     // Make the simulation instance globally accessible for debugging or specific UI interactions.
     // This helps bridge the gap if some parts of UI still expect a global way to access sim state.
@@ -363,23 +370,8 @@ if (!gameContext.HEADLESS_MODE) {
     const inputManager = new InputManager(simulation);
     gameContext.inputManager = inputManager; // Make it available to initInputHandling via gameContext
 
-    // Mount React UI Root
-    const uiRootElement = document.getElementById('ui-root');
-    let reactRoot = null; // Define reactRoot in a scope accessible by animate
-    let uiInitialized = false;
-
-    if (uiRootElement) {
-        reactRoot = ReactDOM.createRoot(uiRootElement);
-        reactRoot.render(
-            <React.StrictMode>
-                <UiRoot gameState={simulation.gameState} /> {/* Pass initial gameState */}
-            </React.StrictMode>
-        );
-        uiInitialized = true;
-        console.log("React UI Root mounted successfully.");
-    } else {
-        console.error('UI root element (#ui-root) not found in index.html. React UI will not be mounted.');
-    }
+    // React UI removed - using pure HTML/CSS UI
+    console.log("Pure HTML/CSS UI initialized.");
 
     // Start the game loop
     console.log("Starting game loop with new Simulation engine...");
@@ -427,14 +419,7 @@ if (!gameContext.HEADLESS_MODE) {
             // This call will be gradually replaced by React components.
             updateUI(gameContext);
 
-            // Re-render React UI if initialized
-            if (uiInitialized && reactRoot) {
-                reactRoot.render(
-                    <React.StrictMode>
-                        <UiRoot gameState={simulation.gameState} />
-                    </React.StrictMode>
-                );
-            }
+            // Pure HTML UI updates handled by updateUI()
         }
         
         // Check if the simulation or other logic determined the game should end
@@ -454,3 +439,4 @@ if (!gameContext.HEADLESS_MODE) {
     }
     requestAnimationFrame(animate);
 }
+})(); // Close the async IIFE
