@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "Real-time strategy game with WebGL rendering",
   "main": "index.js",
+  "sideEffects": false,
   "scripts": {
-    "dev": "webpack serve --mode development --open",
-    "build": "webpack --mode production",
-    "start": "webpack serve --mode development"
+    "preprocess:models": "node scripts/convert-models.js",
+    "dev": "npm run preprocess:models && webpack serve --mode development --open",
+    "build": "npm run preprocess:models && webpack --mode production",
+    "start": "npm run preprocess:models && webpack serve --mode development"
   },
   "dependencies": {
     "cannon-es": "^0.20.0",
@@ -19,7 +21,12 @@
     "html-webpack-plugin": "^5.6.3",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^4.15.1"
+    "webpack-dev-server": "^4.15.1",
+    "obj2gltf": "^3.1.4",
+    "gltf-pipeline": "^4.1.0",
+    "fs-extra": "^11.2.0",
+    "glob": "^10.3.10",
+    "copy-webpack-plugin": "^12.0.2"
   },
   "keywords": [
     "webgl",

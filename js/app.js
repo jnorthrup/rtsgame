@@ -110,8 +110,8 @@ gameContext.gameState = {
     aimingGrenade: false
 };
 
-// Initialize the Three.js renderer
-gameContext.renderer = initThreeRenderer(gameContext.canvas);
+// Initialize the Three.js renderer - this is now async
+// gameContext.renderer = initThreeRenderer(gameContext.canvas); // Old synchronous call
 
 // Initialize the enhanced journaling system
 import { initializeRecordingSystem } from './core/recordingUtils.js';
@@ -338,6 +338,9 @@ function handleMouseUp(e) {
 // Initialize input handling and start the game
 (async () => {
 if (!gameContext.HEADLESS_MODE) {
+    gameContext.renderer = await initThreeRenderer(gameContext.canvas); // New asynchronous call
+    console.log("Three.js renderer initialized asynchronously.");
+
     // initInputHandling(gameContext); // Old input handling - review if it conflicts or can be merged/removed
                                    // For now, new handlers will be added.
     
