@@ -24,7 +24,7 @@ export class WebGLRenderer {
         this.buffers = this.initBuffers();
         this.textures = {};
         this.models = {};
-        this.camera = { x: 2500, y: 2500, zoom: 1.0, canvasWidth: canvas.width, canvasHeight: canvas.height, angle: 30, rotation: 45 };
+        this.camera = { x: 2500, y: 2500, zoom: 1.0, canvasWidth: canvas.width, canvasHeight: canvas.height, angle: 30, rotation: 0 };
         this.initializeModels();
     }
 
@@ -383,6 +383,15 @@ export class WebGLRenderer {
             return;
         }
 
+        // Set viewport to match canvas size
+        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Check for WebGL errors
+        const error = this.gl.getError();
+        if (error !== this.gl.NO_ERROR) {
+            console.error('WebGL error before rendering:', error);
+        }
+
         this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
         this.gl.useProgram(this.shaderProgram);
 
@@ -424,67 +433,41 @@ export class WebGLRenderer {
 
     setupMatrices() {
         const projectionMatrix = mat4.create();
-        const fieldOfViewY = 45 * Math.PI / 180; // in radians
+        const fieldOfViewY = 45 * Math.PI / 180;
         const aspect = this.canvas.width / this.canvas.height;
-        const zNear = 0.1;
-        const zFar = WORLD_SIZE * TILE_SIZE * 2; // Adapted from old code
+        const zNear = 1.0;
+        const zFar = 50000;
         mat4.perspective(projectionMatrix, fieldOfViewY, aspect, zNear, zFar);
 
         const viewMatrix = mat4.create();
         const cam = this.camera;
 
-        // Eye position: Start at the camera's X,Y focus point on the ground (Z=0 for ground),
-        // then move "backwards" (positive Z in view space initially) by a distance controlled by zoom,
-        // then apply pitch (angle around X-axis) and yaw (rotation around Y-axis).
-
-        const eye = vec3.fromValues(cam.x, cam.y, 0); // Initial focus point on the ground
-        const center = vec3.fromValues(cam.x, cam.y, 0); // Look at the same point on the ground
-        const up = vec3.fromValues(0, 1, 0); // World Y is up
-
-        // Distance from the center point, inversely proportional to zoom.
-        // Larger zoom value means camera is closer to the subject.
-        const baseDistance = 500; // Arbitrary base distance for zoom = 1.0
-        const distance = baseDistance / cam.zoom;
-
-        // Apply pitch (angle around X-axis of the camera's local frame)
-        // Positive angle means looking downwards.
-        // We want to move the camera up (positive Y) and back (positive Z in camera space if looking along -Z)
-        const pitchRad = cam.angle * Math.PI / 180;
+        // Proper RTS camera: distance, zoom, and azimuth
+        const baseDistance = 1500; // Base camera distance
+        const distance = baseDistance / cam.zoom; // Zoom affects distance
+        const azimuthRad = cam.rotation * Math.PI / 180; // Azimuth angle in radians
+        const elevationRad = (cam.angle || 30) * Math.PI / 180; // Elevation angle in radians
         
-        // Apply yaw (rotation around world Y-axis)
-        const yawRad = cam.rotation * Math.PI / 180;
-
-        // Calculate eye position using spherical coordinates relative to the 'center' point
-        // X = r * sin(theta) * cos(phi)
-        // Y = r * cos(theta) -> for Z-up this is height. For Y-up this is Y.
-        // Z = r * sin(theta) * sin(phi)
-        // Here, distance is r.
-        // Pitch (cam.angle) is like theta from XZ plane towards Y.
-        // Yaw (cam.rotation) is like phi in XZ plane from Z axis.
-
-        eye[0] = center[0] - distance * Math.cos(pitchRad) * Math.sin(yawRad);
-        eye[1] = center[1] + distance * Math.sin(pitchRad); // Y is height
-        eye[2] = center[2] - distance * Math.cos(pitchRad) * Math.cos(yawRad); // Z is depth (negative if standard view)
-                                                                            // but lookAt handles direction.
+        // Calculate camera position using spherical coordinates
+        const eyeX = cam.x + distance * Math.cos(elevationRad) * Math.cos(azimuthRad);
+        const eyeY = cam.y + distance * Math.cos(elevationRad) * Math.sin(azimuthRad);
+        const eyeZ = distance * Math.sin(elevationRad);
+        
+        const eye = vec3.fromValues(eyeX, eyeY, eyeZ);
+        const center = vec3.fromValues(cam.x, cam.y, 0); // Look at target point
+        const up = vec3.fromValues(0, 0, 1); // Z is up
 
         mat4.lookAt(viewMatrix, eye, center, up);
         
         this.gl.uniformMatrix4fv(this.uniforms.projectionMatrix, false, projectionMatrix);
-        // The uModelViewMatrix in the shader will be set per-object.
-        // For terrain and other static elements not part of gameContext.units/buildings,
-        // we can set a base modelViewMatrix here if needed, or handle it in their render functions.
-        // For now, the main viewMatrix is what gets passed to renderTerrain/renderEntities.
-        // The render* methods will then combine this viewMatrix with individual model matrices.
-        // So, what we set as uModelViewMatrix here is effectively the viewMatrix for static parts of the scene.
         this.gl.uniformMatrix4fv(this.uniforms.modelViewMatrix, false, viewMatrix);
-
 
         const globalNormalMatrix = mat4.create();
         mat4.invert(globalNormalMatrix, viewMatrix);
         mat4.transpose(globalNormalMatrix, globalNormalMatrix);
         this.gl.uniformMatrix4fv(this.uniforms.normalMatrix, false, globalNormalMatrix);
 
-        return viewMatrix; 
+        return viewMatrix;
     }
     
     // Custom math helper functions (multiplyMatrices, get3x3, inverseMatrix, transposeMatrix, mat3ToMat4)

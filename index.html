@@ -27,7 +27,6 @@
             width: 100vw;
             height: 100vh;
             z-index: 1;
-            background-color: #000;
             cursor: grab;
         }
         
@@ -86,21 +85,7 @@
             color: #E74C3C;
         }
         
-        /* Minimap */
-        .minimap-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 200;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 4px;
-            background: rgba(0, 0, 0, 0.8);
-        }
-        
-        #minimapCanvas {
-            display: block;
-            border-radius: 2px;
-        }
+        /* Minimap removed */
         
         /* Controls */
         .controls {
@@ -167,11 +152,6 @@
     <!-- Full-screen WebGL Canvas Background -->
     <canvas id="gameCanvas"></canvas>
     
-    <!-- UI Root for React Components -->
-    <div id="ui-root">
-        <!-- React components will be rendered here with proper z-index -->
-    </div>
-    
     <!-- Top-left Resource Panel -->
     <div class="top-left-panel">
         <div class="panel-title">Resources</div>
@@ -192,10 +172,7 @@
         <button id="start-simulation">Start Simulation</button>
     </div>
     
-    <!-- Minimap -->
-    <div class="minimap-container">
-        <canvas id="minimapCanvas" width="200" height="200"></canvas>
-    </div>
+    <!-- Minimap removed -->
     
     <!-- Game HUD -->
     <div class="game-hud">

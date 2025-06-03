@@ -23,18 +23,7 @@ if (!window.gameContext) {
         console.error("Main game canvas element not found!");
     }
 
-    // Initialize Minimap Canvas Context
-    gameContext.minimapCanvas = document.getElementById('minimapCanvas'); 
-    if (gameContext.minimapCanvas) {
-        gameContext.minimapCtx = gameContext.minimapCanvas.getContext('2d');
-        // Set fixed size for minimap, can be adjusted via CSS for display size
-        gameContext.minimapCanvas.width = 200; 
-        gameContext.minimapCanvas.height = 200;
-        console.log("Minimap canvas initialized successfully.");
-    } else {
-        console.warn("Minimap canvas element with ID 'minimapCanvas' not found. Minimap will not be rendered.");
-        gameContext.minimapCtx = null; 
-    }
+    // Minimap functionality removed
 
     // Initialize core game functions if they aren't already
     // window.gameContext.initGame = initGame; // OLD
@@ -57,8 +46,8 @@ import { SIMULATION_CONFIG } from './config/simulationConfig.js';
 import battleJournal from './ai/battleJournal.js'; // Import battleJournal
 import { Effect } from './core/effect.js'; // Import Effect class
 import { Caption } from './core/caption.js'; // Import Caption class
-import { initRenderer as initWebGLRenderer } from '../js_rewritten/rendering/webglRenderer.js'; // Import WebGL renderer
-import { drawMinimap } from './ui/minimap_canvas2d.js'; // NEW: Import drawMinimap
+import { initThreeRenderer } from '../js_rewritten/rendering/threeRenderer.js'; // Import Three.js renderer
+// Minimap functionality removed
 import { updateUI } from './rendering/ui.js'; // NEW: Import updateUI
 
 // Initial game setup
@@ -100,10 +89,10 @@ gameContext.camera = {
     isDragging: false, // From main_simulation.js
     lastMouseX: 0, // From main_simulation.js
     lastMouseY: 0, // From main_simulation.js
-    angle: 30, 
-    targetAngle: 30, // From main_simulation.js
-    rotation: 45, 
-    targetRotation: 45, // From main_simulation.js
+    angle: 0, // Top-down view, no tilt
+    targetAngle: 0, // Top-down view, no tilt
+    rotation: 0, // Standard top-down view, no rotation
+    targetRotation: 0, // Keep camera fixed without rotation
     canvasWidth: window.innerWidth,
     canvasHeight: window.innerHeight,
     minZoom: MIN_ZOOM_APP, // Use new constant
@@ -121,8 +110,8 @@ gameContext.gameState = {
     aimingGrenade: false
 };
 
-// Initialize the WebGL renderer
-gameContext.renderer = initWebGLRenderer(gameContext.canvas);
+// Initialize the Three.js renderer
+gameContext.renderer = initThreeRenderer(gameContext.canvas);
 
 // Initialize the enhanced journaling system
 import { initializeRecordingSystem } from './core/recordingUtils.js';
@@ -192,17 +181,36 @@ function handleKeyUp(e) {
     if (e.key === 'Alt') keys.alt = false;
 }
 
-function processKeyboardCameraInput(deltaTime) { // Added deltaTime for frame-rate independence
+function processKeyboardCameraInput(deltaTime) {
     const cam = gameContext.camera;
-    const moveSpeed = (KEYBOARD_MOVE_SPEED * deltaTime) / cam.zoom; // Speed adjusted by zoom and deltaTime
-    const rotationSpeed = 25 * deltaTime; // Degrees per second
+    const moveSpeed = (KEYBOARD_MOVE_SPEED * deltaTime) / cam.zoom;
+    const rotationSpeed = 60 * deltaTime; // degrees per second
 
-    if (keys.w) cam.targetY -= moveSpeed;
-    if (keys.s) cam.targetY += moveSpeed;
-    if (keys.a) cam.targetX -= moveSpeed;
-    if (keys.d) cam.targetX += moveSpeed;
-    if (keys.q) cam.targetRotation -= rotationSpeed; // Rotate left
-    if (keys.e) cam.targetRotation += rotationSpeed; // Rotate right
+    // WASD movement - always screen relative, never affected by camera rotation
+    if (keys.w) { // Up on screen = negative Y in world
+        cam.targetY -= moveSpeed;
+    }
+    if (keys.s) { // Down on screen = positive Y in world
+        cam.targetY += moveSpeed;
+    }
+    if (keys.a) { // Left on screen = negative X in world
+        cam.targetX -= moveSpeed;
+    }
+    if (keys.d) { // Right on screen = positive X in world
+        cam.targetX += moveSpeed;
+    }
+    
+    // Q/E for rotation around the target point
+    if (keys.q) {
+        cam.targetRotation -= rotationSpeed;
+    }
+    if (keys.e) {
+        cam.targetRotation += rotationSpeed;
+    }
+    
+    // Normalize rotation to stay within 0-360 degrees
+    while (cam.targetRotation < 0) cam.targetRotation += 360;
+    while (cam.targetRotation >= 360) cam.targetRotation -= 360;
 }
 
 function calculateDynamicCameraAngle() {
@@ -232,11 +240,17 @@ function updateCameraLogic(deltaTime) { // Renamed from updateCamera to avoid co
         cam.velocityY *= MOMENTUM_DECAY;
     }
 
-    cam.x += (cam.targetX - cam.x) * CAMERA_SMOOTHING;
-    cam.y += (cam.targetY - cam.y) * CAMERA_SMOOTHING;
+    // Reduce smoothing during dragging for immediate response
+    const smoothingFactor = cam.isDragging ? 1.0 : CAMERA_SMOOTHING;
+    cam.x += (cam.targetX - cam.x) * smoothingFactor;
+    cam.y += (cam.targetY - cam.y) * smoothingFactor;
     cam.zoom += (cam.targetZoom - cam.zoom) * CAMERA_SMOOTHING;
     cam.angle += (cam.targetAngle - cam.angle) * CAMERA_SMOOTHING;
     cam.rotation += (cam.targetRotation - cam.rotation) * CAMERA_SMOOTHING;
+    
+    // Normalize current rotation to stay within 0-360 degrees
+    while (cam.rotation < 0) cam.rotation += 360;
+    while (cam.rotation >= 360) cam.rotation -= 360;
 
     // Clamp zoom
     cam.zoom = Math.max(MIN_ZOOM_APP, Math.min(MAX_ZOOM_APP, cam.zoom));
@@ -260,6 +274,7 @@ function handleMouseWheel(e) {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
+        // Simple screen-to-world projection for zoom-to-cursor
         const worldXBeforeZoom = (mouseX - cam.canvasWidth / 2) / cam.zoom + cam.x;
         const worldYBeforeZoom = (mouseY - cam.canvasHeight / 2) / cam.zoom + cam.y;
         
@@ -293,13 +308,19 @@ function handleMouseMove(e) {
         const deltaX = e.clientX - cam.lastMouseX;
         const deltaY = e.clientY - cam.lastMouseY;
         
-        // Drag to pan: Invert Y for typical map panning feel if needed, but this is direct
-        cam.targetX -= deltaX / cam.zoom;
-        cam.targetY -= deltaY / cam.zoom; // In main_simulation, this was += deltaY. Adjusted for consistency.
-                                         // Screen Y up is world Y up.
+        // Direct screen-to-world mapping adjusted for precise dragging
+        // Account for canvas dimensions to ensure land under pointer moves with it
+        const rect = gameContext.canvas.getBoundingClientRect();
+        const scaleFactor = 1 / cam.zoom;
+        const worldDeltaX = deltaX * scaleFactor;
+        const worldDeltaY = deltaY * scaleFactor;
         
-        cam.velocityX = -deltaX * 0.1; // Apply some momentum
-        cam.velocityY = -deltaY * 0.1; // Apply some momentum
+        cam.targetX -= worldDeltaX;
+        cam.targetY += worldDeltaY; // Invert Y-axis for intuitive top-down drag (mouse down drags view down)
+        
+        // Minimize momentum during drag for immediate response
+        cam.velocityX = 0;
+        cam.velocityY = 0;
 
         cam.lastMouseX = e.clientX;
         cam.lastMouseY = e.clientY;
@@ -362,6 +383,17 @@ if (!gameContext.HEADLESS_MODE) {
     const simulation = new Simulation(simulationCoreContext);
     await simulation.init(); // Initialize simulation state, terrain, entities
 
+    // After simulation initializes and terrain is ready, create the Three.js terrain mesh
+    if (gameContext.renderer && simulation?.terrain) {
+        gameContext.renderer.updateTerrain(simulation.terrain); // Explicitly create/update terrain after init
+    }
+
+    // Hide the loading overlay once simulation is initialized
+    const loadingOverlay = document.getElementById('loading');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
+    }
+
     // Make the simulation instance globally accessible for debugging or specific UI interactions.
     // This helps bridge the gap if some parts of UI still expect a global way to access sim state.
     window.simulation = simulation;
@@ -379,9 +411,21 @@ if (!gameContext.HEADLESS_MODE) {
     function animate(timestamp) {
         const deltaTime = lastFrameTime > 0 ? (timestamp - lastFrameTime) / 1000 : (1/60); // seconds
         lastFrameTime = timestamp;
+        
+        // Add battle detection and camera adjustment
+        if (simulation.entityManager) {
+            const battlingUnits = simulation.entityManager.units.filter(unit => unit.state === 'attacking' || unit.health < unit.maxHealth);
+            if (battlingUnits.length > 0) {
+                const battleCenterX = battlingUnits.reduce((sum, unit) => sum + unit.x, 0) / battlingUnits.length;
+                const battleCenterY = battlingUnits.reduce((sum, unit) => sum + unit.y, 0) / battlingUnits.length;
+                gameContext.camera.targetX = battleCenterX;
+                gameContext.camera.targetY = battleCenterY;
+                gameContext.camera.targetZoom = Math.max(2.0, gameContext.camera.targetZoom);  // Zoom in slightly for focus
+            }
+        }
 
         // Update camera logic (smoothing, keyboard/mouse input)
-        updateCameraLogic(deltaTime);
+        updateCameraLogic(deltaTime);  // Ensure camera updates after potential adjustments
 
 
         // Update the simulation state
@@ -400,24 +444,18 @@ if (!gameContext.HEADLESS_MODE) {
                 console.error("Error during WebGL rendering in main loop:", e);
             }
 
-            // Draw Minimap (2D canvas)
-            if (gameContext.minimapCtx) {
-                const minimapRenderContext = {
-                    minimapCtx: gameContext.minimapCtx,
-                    terrain: simulation.terrain, // From new simulation object
-                    resourceNodes: simulation.gameContext.resourceNodes, // From original context passed to sim
-                    units: simulation.entityManager.units,
-                    buildings: simulation.entityManager.buildings,
-                    camera: gameContext.camera // Global camera object
-                };
-                drawMinimap(minimapRenderContext);
-            }
+            // Minimap functionality removed
 
             // Update other UI elements (DOM manipulation)
-            // updateUI is called with the global gameContext which it uses to update DOM
-            // It also uses formatTime, which is now correctly imported in ui.js from simulation.js
-            // This call will be gradually replaced by React components.
-            updateUI(gameContext);
+            // updateUI needs simulation data, so we merge it with gameContext for the UI
+            const uiContext = {
+                ...gameContext,
+                units: simulation.entityManager?.units || [],
+                buildings: simulation.entityManager?.buildings || [],
+                resources: simulation.resources || { blue: {}, red: {} },
+                gameState: simulation.gameState || gameContext.gameState
+            };
+            updateUI(uiContext);
 
             // Pure HTML UI updates handled by updateUI()
         }
