@@ -3,16 +3,16 @@
 // Enhanced Headless Battle Test - Prove localStorage replay with action-packed AI battles
 // Demonstrates strategic AI creating engaging battles that can be perfectly replayed
 
-import { UNIT_TYPES } from './js/config/unitTypes.js';
-import { BUILDING_TYPES } from './js/config/buildingTypes.js';
-import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from './js/config/gameConstants.js';
-import { Unit } from './js/core/unit.js';
-import { Building } from './js/core/building.js';
-import { generateTerrain, findLandPosition } from './js/core/terrain.js';
-import { battleJournal } from './js/core/battleJournal.js';
-import { battleReplay } from './js/core/battleReplay.js';
-import { gameRNG, enableDeterministicMode, disableDeterministicMode } from './js/core/deterministicRNG.js';
-import { makeStrategicDecisions, coordinateAttacks, resetAIState } from './js/ai/strategicAI.js';
+import { UNIT_TYPES } from '../config/unitTypes.js';
+import { BUILDING_TYPES } from '../config/buildingTypes.js';
+import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+import { Unit } from '../core/unit.js';
+import { Building } from '../core/building.js';
+import { generateTerrain, findLandPosition } from '../core/terrain.js';
+import { battleJournal } from '../core/battleJournal.js';
+import { battleReplay } from '../core/battleReplay.js';
+import { gameRNG, enableDeterministicMode, disableDeterministicMode } from '../core/deterministicRNG.js';
+import { makeStrategicDecisions, coordinateAttacks, resetAIState } from '../ai/strategicAI.js';
 
 class EnhancedHeadlessTest {
     constructor() {

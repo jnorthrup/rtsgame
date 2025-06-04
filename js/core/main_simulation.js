@@ -7,9 +7,9 @@
 // #                                                                                                  #
 // ####################################################################################################
 
-import { WebGL2DRenderer } from './webgl_2d_renderer.js';
-import { WebGLRenderer } from './js_rewritten/rendering/webglRenderer.js';
-import { TERRAIN_TYPES, TILE_SIZE, GRID_SIZE, WORLD_SIZE } from './js/config/gameConstants.js';
+import { WebGL2DRenderer } from '../rendering/webgl_2d_renderer.js';
+import { WebGLRenderer } from '../rendering/webglRenderer.js';
+import { TERRAIN_TYPES, TILE_SIZE, GRID_SIZE, WORLD_SIZE } from '../config/gameConstants.js';
 
 // Simple seeded random number generator for deterministic simulation
 class SeededRandom {

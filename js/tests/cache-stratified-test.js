@@ -3,13 +3,13 @@
 // Cache-Stratified Data Test - Following README specifications exactly
 // Demonstrates the 4-layer data stratification for optimal cache locality
 
-import { UNIT_TYPES } from './js/config/unitTypes.js';
-import { BUILDING_TYPES } from './js/config/buildingTypes.js';
-import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from './js/config/gameConstants.js';
-import { Unit } from './js/core/unit.js';
-import { Building } from './js/core/building.js';
-import { SpatialIndex } from './js/core/spatialIndex.js';
-import { BatchProcessor } from './js/core/batchProcessor.js';
+import { UNIT_TYPES } from '../config/unitTypes.js';
+import { BUILDING_TYPES } from '../config/buildingTypes.js';
+import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+import { Unit } from '../core/unit.js';
+import { Building } from '../core/building.js';
+import { SpatialIndex } from '../core/spatialIndex.js';
+import { BatchProcessor } from '../core/batchProcessor.js';
 
 console.log('🚀 CACHE-STRATIFIED DATA TEST (Following README)');
 console.log('Testing: 4-Layer Data Stratification → Cache Locality → Performance\n');

@@ -1,8 +1,8 @@
-import { UNIT_TYPES } from './js/config/unitTypes.js';
-import { BUILDING_TYPES } from './js/config/buildingTypes.js';
-import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from './js/config/gameConstants.js';
-import { Unit } from './js/core/unit.js';
-import { Building } from './js/core/building.js';
+import { UNIT_TYPES } from '../config/unitTypes.js';
+import { BUILDING_TYPES } from '../config/buildingTypes.js';
+import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+import { Unit } from '../core/unit.js';
+import { Building } from '../core/building.js';
 import fs from 'fs';
 import path from 'path';
 

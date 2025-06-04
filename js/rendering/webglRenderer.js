@@ -8,9 +8,9 @@
  */
 
 import { mat4, vec3 } from 'gl-matrix'; // Import gl-matrix
-import { TERRAIN_TYPES, TILE_SIZE, GRID_SIZE, WORLD_SIZE } from '../../js/config/gameConstants.js';
-import { BUILDING_TYPES } from '../../js/config/buildingTypes.js';
-import { UNIT_TYPES } from '../../js/config/unitTypes.js';
+import { TERRAIN_TYPES, TILE_SIZE, GRID_SIZE, WORLD_SIZE } from '../config/gameConstants.js';
+import { BUILDING_TYPES } from '../config/buildingTypes.js';
+import { UNIT_TYPES } from '../config/unitTypes.js';
 import { UNIT_MODELS, BUILDING_MODELS, TERRAIN_MODELS, TERRAIN_TEXTURES, EFFECT_TEXTURES, SEA_LEVEL } from '../config/modelDefaults.js';
 
 // WebGL Renderer Class

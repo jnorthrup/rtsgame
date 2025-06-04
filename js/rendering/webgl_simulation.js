@@ -7,7 +7,7 @@
 // ####################################################################################################
 
 import { WebGL2DRenderer } from './webgl_2d_renderer.js';
-import { TERRAIN_TYPES, TILE_SIZE, GRID_SIZE } from './js/config/gameConstants.js';
+import { TERRAIN_TYPES, TILE_SIZE, GRID_SIZE } from '../config/gameConstants.js';
 
 const canvas = document.getElementById('game-canvas');
 const renderer = new WebGL2DRenderer(canvas);
