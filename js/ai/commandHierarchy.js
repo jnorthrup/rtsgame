@@ -1,6 +1,16 @@
 // js/ai/commandHierarchy.js
 // Command hierarchy and squad management system
 
+import { calculateAssetScore, getUnitMaxHP, calculateRelativeHealth } from './strategicAI.js';
+// calculateBasePower is used by calculateAssetScore, so it doesn't need to be explicitly imported.
+import { UNIT_TYPES } from '../config/unitTypes.js'; // Added for UNIT_TYPES.commander access
+import { calculateBasePower } from './strategicAI.js'; // Needed for groupPower calculation
+
+const LOW_HEALTH_THRESHOLD_FOR_OVERKILL_CHECK = 0.3; // Target below 30% health
+const MIN_GROUP_SIZE_FOR_OVERKILL_ADJUSTMENT = 4;  // Only adjust if group has at least this many members
+const NUM_UNITS_TO_FOCUS_ON_WEAK_TARGET = 2;       // Number of units to assign to a weak target
+const MIN_POWER_RATIO_FOR_GROUP_COMMITMENT = 0.4; // Group power must be at least 40% of target's asset score to commit.
+
 export const CommandRank = {
     COMMANDER: 5,      // ACU - Supreme commander
     COLONEL: 4,        // High-tier units, experimental units
@@ -293,12 +303,70 @@ export class CommandGroup {
     executeHunt(gameContext) {
         // Seek and destroy enemy units
         const nearestEnemy = this.findNearestEnemy(gameContext);
-        if (nearestEnemy) {
-            this.target = nearestEnemy;
-            this.members.forEach(member => {
-                if (!member.target || this.getRank(nearestEnemy) > this.getRank(member.target)) {
-                    member.target = nearestEnemy;
+        this.target = nearestEnemy; // Set group target
+
+        if (this.target) {
+            const targetAssetScore = calculateAssetScore(this.target);
+            const groupPower = this.members.reduce((sum, member) => sum + calculateBasePower(member), 0);
+
+            // Avoid pointless attack if group is significantly weaker than the target, unless target is Commander
+            if (this.target.type !== UNIT_TYPES.commander &&
+                groupPower < targetAssetScore * MIN_POWER_RATIO_FOR_GROUP_COMMITMENT &&
+                this.members.length > 0) {
+
+                // console.log(`Group ${this.id} avoiding pointless attack on ${this.target.type.name} (${this.target.id}). Group Power: ${groupPower}, Target Score: ${targetAssetScore}`);
+                this.target = null; // Clear the target
+                this.mission = MissionType.SEARCH; // Revert to search to find a more suitable engagement
+            }
+
+            // Proceed with target assignment if target is still valid (not cleared by pointless attack check)
+            if (this.target) {
+                const targetMaxHP = getUnitMaxHP(this.target);
+                const targetRH = calculateRelativeHealth(this.target, targetMaxHP);
+
+                if (this.members.length >= MIN_GROUP_SIZE_FOR_OVERKILL_ADJUSTMENT &&
+                    targetRH < LOW_HEALTH_THRESHOLD_FOR_OVERKILL_CHECK &&
+                    targetRH > 0 && // Target is weak but not dead
+                    this.target.type && this.target.type.name !== UNIT_TYPES.commander.name // Avoid overkill logic for commanders
+                ) {
+                    // Overkill avoidance for weak target
+                    // Sort members by distance to assign closest units
+                const sortedMembers = [...this.members].sort((a, b) => {
+                    const distA = Math.sqrt(Math.pow(a.x - this.target.x, 2) + Math.pow(a.y - this.target.y, 2));
+                    const distB = Math.sqrt(Math.pow(b.x - this.target.x, 2) + Math.pow(b.y - this.target.y, 2));
+                    return distA - distB;
+                });
+
+                for (let i = 0; i < sortedMembers.length; i++) {
+                    const member = sortedMembers[i];
+                    if (i < NUM_UNITS_TO_FOCUS_ON_WEAK_TARGET) {
+                        member.target = this.target; // Focus fire with a few units
+                    } else {
+                        member.target = null; // Other units can look for other targets or move
+                        // Set a patrol point near the current engagement or leader
+                        member.patrolTarget = {
+                            x: this.target.x + (Math.random() - 0.5) * 50,
+                            y: this.target.y + (Math.random() - 0.5) * 50
+                        };
+                    }
                 }
+                    // console.log(`Group ${this.id} applying overkill avoidance for target ${this.target.id}`);
+                } else {
+                    // Standard assignment for non-weak target, small group, or commander
+                    this.members.forEach(member => {
+                        member.target = this.target;
+                    });
+                }
+            } else {
+                // Target was cleared by pointless attack check, ensure members also have no target
+                this.members.forEach(member => {
+                    member.target = null;
+                 });
+            }
+        } else {
+            // No target found by findNearestEnemy, clear existing targets for members of this hunt group
+            this.members.forEach(member => {
+               member.target = null;
             });
         }
     }
@@ -571,65 +639,60 @@ export class CommandGroup {
     }
 
     scoreStrikeTarget(target, gameContext) {
-        let score = 10; // Base score
-        
-        // Higher value for important targets
-        if (target.type) {
-            if (target.type.name === 'Commander') score += 100;
-            else if (target.type.name.includes('Factory')) score += 50;
-            else if (target.type.tier >= 3) score += 30;
-            else if (target.type.tier >= 2) score += 20;
-        }
+        let newScore = calculateAssetScore(target);
         
         // Penalty for distance
         const distance = Math.sqrt(
             (target.x - this.leader.x) ** 2 + (target.y - this.leader.y) ** 2
         );
-        score -= distance / 20;
+        newScore -= distance / 20; // Keep existing distance penalty factor
         
         // Penalty for anti-air threats nearby
         const aaThreats = gameContext.units.filter(u => 
             u.team !== this.leader.team && 
             this.getUnitRole(u) === UnitRole.ANTI_AIR &&
-            Math.sqrt((u.x - target.x) ** 2 + (u.y - target.y) ** 2) < 300
+            Math.sqrt((u.x - target.x) ** 2 + (u.y - target.y) ** 2) < 300 // AA check radius
         ).length;
         
-        score -= aaThreats * 15;
+        newScore -= aaThreats * 15; // Keep existing AA threat penalty
         
-        return Math.max(0, score);
+        return Math.max(0, newScore);
     }
 
     findBestTargetForAirUnit(airUnit, gameContext) {
         const enemies = gameContext.units.filter(u => 
             u.team !== airUnit.team && 
-            Math.sqrt((u.x - airUnit.x) ** 2 + (u.y - airUnit.y) ** 2) < airUnit.type.range * 1.5
+            u.hp > 0 && // Ensure target is alive
+            Math.sqrt((u.x - airUnit.x) ** 2 + (u.y - airUnit.y) ** 2) < (airUnit.type.range || 100) * 1.5 // Use unit's range
         );
         
         if (enemies.length === 0) return null;
         
-        // Air units prioritize different targets based on rock-paper-scissors
         let bestTarget = null;
-        let bestScore = 0;
+        let bestScore = -Infinity; // Initialize with a very low score
         
         for (const enemy of enemies) {
-            let score = 10;
+            let newScore = calculateAssetScore(enemy);
             const enemyRole = this.getUnitRole(enemy);
             
-            // Rock-paper-scissors scoring
+            // Apply role-based adjustments
             if (enemyRole === UnitRole.GROUND) {
-                score += 30; // Air beats ground (scissors beats paper)
+                // This case might be less relevant if this function is strictly air-to-air,
+                // but if air units can target ground, this is a bonus.
+                // If only air targets are expected, this might be removed or adjusted.
+                newScore += 30; // Bonus for attacking ground (if applicable)
             } else if (enemyRole === UnitRole.ANTI_AIR) {
-                score -= 20; // Avoid AA (rock beats scissors)
+                newScore *= 0.5; // Significantly reduce score for AA threats
             } else if (enemyRole === UnitRole.AIR) {
-                score += 10; // Air vs air is neutral
+                newScore *= 1.1; // Slight bonus for engaging other air units
             }
             
             // Distance penalty
             const distance = Math.sqrt((enemy.x - airUnit.x) ** 2 + (enemy.y - airUnit.y) ** 2);
-            score -= distance / 10;
+            newScore -= distance / 10; // Keep existing distance penalty factor
             
-            if (score > bestScore) {
-                bestScore = score;
+            if (newScore > bestScore) {
+                bestScore = newScore;
                 bestTarget = enemy;
             }
         }

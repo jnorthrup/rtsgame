@@ -1,6 +1,10 @@
 // Enhanced Strategic AI - Aggressive economic expansion and tactical coordination
 // Designed to create engaging battles with lots of action for replay recording
 
+const ASSET_SCORE_HEALTH_K_FACTOR = 0.2;
+const TARGET_SCORE_DISTANCE_DIVISOR = 50;
+const MIN_POWER_RATIO_TO_ENGAGE_ENEMY = 0.5; // Group power should be at least 50% of target's asset score.
+
 import { BUILDING_TYPES } from '../config/buildingTypes.js';
 import { UNIT_TYPES } from '../config/unitTypes.js';
 import { findLandPosition } from '../core/terrain.js';
@@ -299,6 +303,56 @@ function coordinateTacticalGroups(gameContext, team, teamUnits, ai) {
         }
     });
 }
+
+// --- Asset Scoring Functions ---
+
+export function getUnitMaxHP(unit) {
+    if (unit && unit.type && typeof unit.type.hp === 'number' && unit.type.hp > 0) {
+        return unit.type.hp;
+    }
+    // console.warn(`Unit type ${unit?.type?.name || 'unknown'} missing valid max HP (unit.type.hp). Falling back.`);
+    return 100; // Default fallback
+}
+
+export function calculateRelativeHealth(unit, maxHP) {
+    if (!unit || typeof unit.hp !== 'number' || maxHP <= 0) {
+        return 0; // Dead, invalid, or maxHP is zero/negative
+    }
+    return Math.max(0, Math.min(1, unit.hp / maxHP));
+}
+
+export function calculateBasePower(unit) { // gameContext removed as UNIT_TYPES is globally available via import
+    if (!unit || !unit.type) return 10; // Default for unknown type
+
+    let bp = unit.type.damage || 10;
+    if (unit.type.tier) {
+        bp *= (1 + (unit.type.tier - 1) * 0.5); // T1=1x, T2=1.5x, T3=2x
+    }
+
+    // Commander check - UNIT_TYPES should be in scope from file imports
+    if (UNIT_TYPES.commander && unit.type.name === UNIT_TYPES.commander.name) {
+        bp *= 5.0;
+    } else if (unit.type.isExperimental) { // Hypothetical flag
+        bp *= 3.0;
+    }
+    // Add other role-specific multipliers if needed in future iterations
+    return Math.max(1, bp); // Ensure power is at least 1
+}
+
+export function calculateAssetScore(targetUnit) { // gameContext removed as helpers don't need it directly now
+    if (!targetUnit || typeof targetUnit.hp !== 'number' || targetUnit.hp <= 0) {
+        return 0; // Dead or invalid target
+    }
+    const maxHP = getUnitMaxHP(targetUnit);
+    const rh = calculateRelativeHealth(targetUnit, maxHP);
+    const bp = calculateBasePower(targetUnit); // Pass gameContext if calculateBasePower needs it
+
+    const assetScoreValue = bp / (rh + ASSET_SCORE_HEALTH_K_FACTOR); // Renamed to avoid conflict
+
+    return Math.max(0, assetScoreValue); // Use renamed variable
+}
+
+// --- End Asset Scoring Functions ---
 
 function executeFormationAttacks(gameContext, team, teamUnits, ai) {
     if (teamUnits.length < 8) return;
@@ -665,15 +719,24 @@ function selectOptimalTarget(gameContext, team, group) {
         const dist = Math.sqrt(
             (enemy.x - group.center.x) ** 2 + (enemy.y - group.center.y) ** 2
         );
-        let score = group.strength / (dist + 50);
         
-        // Target prioritization
-        if (enemy.type === UNIT_TYPES.commander) score *= 5;
-        else if (enemy.type?.produces) score *= 2;
-        else if (enemy.type?.resourceGeneration) score *= 1.5;
+        const baseAssetScore = calculateAssetScore(enemy);
+        let currentScore = baseAssetScore / (dist + TARGET_SCORE_DISTANCE_DIVISOR);
+
+        // Avoid pointless attacks: Penalize score if group is too weak for the target, unless it's a commander
+        // Assuming group.strength is a reasonable proxy for the group's collective power.
+        // A more accurate sum of calculateBasePower for group members could be used if available on 'group'.
+        const groupEffectivePower = group.strength;
+        if (enemy.type !== UNIT_TYPES.commander && groupEffectivePower < baseAssetScore * MIN_POWER_RATIO_TO_ENGAGE_ENEMY) {
+            currentScore *= 0.1; // Heavily penalize if group is much weaker and target isn't commander
+        }
         
-        if (score > bestScore) {
-            bestScore = score;
+        // Additional prioritization can be added here if needed,
+        // though calculateBasePower already handles commanders and experimentals.
+        // Example: if (enemy.type?.produces) currentScore *= 1.2; // Slightly boost factories if not covered enough
+
+        if (currentScore > bestScore) {
+            bestScore = currentScore;
             bestTarget = enemy;
         }
     }
