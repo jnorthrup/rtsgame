@@ -7,6 +7,12 @@ import { Effect } from './effect.js';
 import { Caption } from './caption.js';
 import { Building } from './building.js';
 
+const WEIGHT_SPEED_PENALTY_FACTOR = 0.01;
+const DEFAULT_UNIT_SPEED = 1.0;
+const DEFAULT_UNIT_WEIGHT = 0;
+const SHIELD_EFFECTIVENESS_WATTAGE_BASELINE = 20; // Baseline weaponEnergyCost for 1x effectiveness vs shields.
+const DEFAULT_SHIELD_REGEN_RATE = 1.0; // Default shield regen per second if not specified.
+
 class Unit {
     constructor(x, y, team, type, simulation) {
         this.x = x;
@@ -16,16 +22,18 @@ class Unit {
         this.hp = type.maxHp;
         this.maxHp = type.maxHp;
         this.target = null;
-        this.cooldown = 0;
+        this.cooldown = 0; // Represents attack cooldown time remaining
         // Access seedRandom from the simulation instance's direct property
         this.angle = simulation.seedRandom ? simulation.seedRandom.random() * Math.PI * 2 : Math.random() * Math.PI * 2; 
         this.vx = 0;
+        this.currentEnergy = type.batteryCapacity || 0; // Initialize to full capacity
         this.vy = 0;
         this.selected = false;
         this.task = null; // Generic task, could be expanded
-        this.shields = type.shields || 0;
-        this.maxShields = type.shields || 0;
-        this.shieldRegen = type.shieldRegen || 0;
+        this.shields = type.shields || 0; // This is the old HP shield, will be replaced/complemented by energy shields
+        this.maxShields = type.shields || 0; // Old HP shield
+        this.shieldRegen = type.shieldRegen || 0; // Old HP shield regen
+        this.currentEnergyShields = this.type.maxEnergyShields || 0; // New energy shield
         this.patrolTarget = null;
         this.lastTargetSwitch = 0;
         // Access seedRandom from the simulation instance's direct property
@@ -57,6 +65,18 @@ class Unit {
         this.currentWaypointIndex = 0;
         this.pathRequestCooldown = 0;
         this.PATH_REQUEST_INTERVAL = 30; // Request path every ~0.5s at 60fps
+
+        // Speed calculation considering weight
+        const baseSpeed = this.type.speed || DEFAULT_UNIT_SPEED;
+        const weight = this.type.unitWeight || DEFAULT_UNIT_WEIGHT;
+        let speedDenominator = 1 + (weight * WEIGHT_SPEED_PENALTY_FACTOR);
+        if (speedDenominator <= 0.1) {
+            speedDenominator = 0.1;
+        }
+        this.speed = baseSpeed / speedDenominator;
+        if (this.speed < 0) {
+            this.speed = 0;
+        }
 
         // Enhanced authority properties
         this.baseAuthority = this.commandAuthority; // Use original for base
@@ -95,14 +115,58 @@ class Unit {
             const terrainType = terrain[tileX][tileY];
 
             if (this.type.movementType === 'amphibious') {
+                // Amphibious units might have different base speeds for land/water,
+                // these base speeds would then be adjusted by the single weight factor.
+                let terrainSpecificBaseSpeed = this.type.speed; // default to generic speed
                 if (terrainType === TERRAIN_TYPES.WATER && typeof this.type.speedWater === 'number') {
-                    return this.type.speedWater;
+                    terrainSpecificBaseSpeed = this.type.speedWater;
                 } else if (terrainType === TERRAIN_TYPES.LAND && typeof this.type.speedLand === 'number') {
-                    return this.type.speedLand;
+                    terrainSpecificBaseSpeed = this.type.speedLand;
+                }
+                // The weight penalty is applied to this terrain-specific base speed.
+                // We re-use this.speed which was already calculated with the generic this.type.speed.
+                // A more accurate way would be to calculate effective speed here *each time* based on current terrain.
+                // For now, this.speed (calculated once in constructor) is used by movement logic.
+                // To make it fully terrain-dependent with weight:
+                // const weight = this.type.unitWeight || DEFAULT_UNIT_WEIGHT;
+                // let speedDenominator = 1 + (weight * WEIGHT_SPEED_PENALTY_FACTOR);
+                // if (speedDenominator <= 0.1) speedDenominator = 0.1;
+                // return (terrainSpecificBaseSpeed || DEFAULT_UNIT_SPEED) / speedDenominator;
+                // However, getCurrentSpeed is used to get the *current* effective speed.
+                // this.speed (instance property) should store the final, adjusted speed.
+                // The current implementation of movement logic uses getCurrentSpeed(), so let's adjust it there.
+
+                // Re-evaluating: this.speed should be the *effective* speed.
+                // getCurrentSpeed() should return this.speed, potentially adjusted for temporary effects (not terrain base speed).
+                // The constructor correctly sets this.speed based on general type.speed.
+                // If amphibious units have different *base* speeds on land/water, then getCurrentSpeed should
+                // calculate the effective speed based on *that terrain's base speed* and the *unit's weight*.
+                // This means the constructor's single this.speed might be too simple if base speed varies by terrain.
+                // Let's assume for now the constructor sets a general effective speed, and terrain might apply a multiplier later if needed.
+                // For this subtask, the goal is that this.speed (used by movement logic) is weight-adjusted.
+                // The current getCurrentSpeed() returns type.speedWater or type.speedLand *unadjusted* by weight.
+                // This needs to be fixed: getCurrentSpeed should return the *effective* speed.
+                // The constructor sets this.speed. getCurrentSpeed should use that.
+                // If base speed for amphibious units changes, it should be a multiplier on this.speed or recalculate.
+
+                // Corrected logic: this.speed is the single, weight-adjusted speed.
+                // If amphibious units have different base speeds, those should be adjusted by weight too.
+                // Let's assume this.type.speed is the primary speed, adjusted by weight.
+                // If speedWater/speedLand exist, they are *alternative base speeds* that also need weight adjustment.
+                const weightFactor = 1 + ((this.type.unitWeight || DEFAULT_UNIT_WEIGHT) * WEIGHT_SPEED_PENALTY_FACTOR);
+                const denominator = Math.max(0.1, weightFactor);
+
+                if (terrainType === TERRAIN_TYPES.WATER && typeof this.type.speedWater === 'number') {
+                    return (this.type.speedWater || DEFAULT_UNIT_SPEED) / denominator;
+                } else if (terrainType === TERRAIN_TYPES.LAND && typeof this.type.speedLand === 'number') {
+                    return (this.type.speedLand || DEFAULT_UNIT_SPEED) / denominator;
                 }
             }
         }
-        return this.type.speed;
+        // For non-amphibious units, or amphibious units on default terrain, this.speed (already weight-adjusted) is used.
+        // If getCurrentSpeed is *only* for terrain specific base speed (before weight), then movement logic must use this.speed.
+        // The current code uses getCurrentSpeed() in movement. So getCurrentSpeed MUST return the final effective speed.
+        return this.speed; // this.speed is already weight-adjusted.
     }
 
     update(simulation, deltaTime) { // Renamed gameContext to simulation, deltaTime is passed
@@ -110,9 +174,30 @@ class Unit {
         const { units, buildings } = entityManager; // Get entities from entityManager
         // deltaTime is now a direct parameter
 
-        if (this.shields < this.maxShields) {
-            this.shields = Math.min(this.maxShields, this.shields + this.shieldRegen * deltaTime); // shieldRegen per second
+        // Energy Regeneration
+        if (typeof this.type.generatorOutput === 'number' && typeof this.type.batteryCapacity === 'number') {
+            this.currentEnergy += this.type.generatorOutput * deltaTime;
+            if (this.currentEnergy > this.type.batteryCapacity) {
+                this.currentEnergy = this.type.batteryCapacity;
+            }
         }
+
+        // Shield Regeneration (New Energy Shields)
+        if (this.type.maxEnergyShields > 0) {
+            if (this.currentEnergyShields < this.type.maxEnergyShields) {
+                const regenRate = this.type.shieldRegenRate || DEFAULT_SHIELD_REGEN_RATE;
+                this.currentEnergyShields += regenRate * deltaTime;
+                if (this.currentEnergyShields > this.type.maxEnergyShields) {
+                    this.currentEnergyShields = this.type.maxEnergyShields;
+                }
+            }
+        }
+
+        // Old HP Shield Regeneration (if still intended to be separate)
+        if (this.maxShields > 0 && this.shields < this.maxShields) { // Assuming this.shields is the old HP shield
+            this.shields = Math.min(this.maxShields, this.shields + (this.shieldRegen || 0) * deltaTime);
+        }
+
 
         if (this.type.support) {
             this.performSupportRole(simulation, deltaTime); // Pass simulation and deltaTime
@@ -464,14 +549,12 @@ class Unit {
         const { entityManager, gameState } = simulation;
         let damage = this.type.damage;
 
-        if (target.shields !== undefined && target.shields > 0) {
-            const shieldDamage = Math.min(damage, target.shields);
-            target.shields -= shieldDamage;
-            damage -= shieldDamage;
-        }
+        // Note: The old HP shield logic (target.shields) is now superseded by energy shields in takeDamage.
+        // If both shield types are meant to co-exist, the logic in takeDamage would need to be more complex.
+        // For now, takeDamage will prioritize energy shields.
 
-        if (damage > 0 && target.hp > 0) {
-             target.takeDamage(damage, simulation); // Pass simulation
+        if (damage > 0 && target.hp > 0) { // Ensure target is alive before attempting to deal damage
+             target.takeDamage(damage, this, simulation); // Pass attacker (this) as sourceUnit
         }
 
         entityManager.addEffect(new Effect(this.x, this.y, target.x, target.y, this.type.effectColor));
@@ -483,17 +566,72 @@ class Unit {
         }
     }
 
-    takeDamage(damage, simulation) { // Renamed gameContext
-        const { entityManager, seedRandom } = simulation;
-        this.hp -= damage;
+    takeDamage(damage, sourceUnit, simulation) {
+        const { entityManager, seedRandom } = simulation; // simulation is the new gameContext
+        let remainingDamage = damage;
 
-        if (damage > 0 && seedRandom.random() < 0.2) {
+        // New Energy Shield Logic
+        if (this.currentEnergyShields > 0 && sourceUnit && sourceUnit.type) {
+            const attackerWeaponEnergyCost = sourceUnit.type.weaponEnergyCost || SHIELD_EFFECTIVENESS_WATTAGE_BASELINE;
+            let shieldEffectiveness = attackerWeaponEnergyCost / SHIELD_EFFECTIVENESS_WATTAGE_BASELINE;
+            shieldEffectiveness = Math.max(0.1, shieldEffectiveness);
+
+            const damageToDealToShields = remainingDamage * shieldEffectiveness;
+
+            if (damageToDealToShields >= this.currentEnergyShields) {
+                remainingDamage -= this.currentEnergyShields / shieldEffectiveness;
+                this.currentEnergyShields = 0;
+            } else {
+                this.currentEnergyShields -= damageToDealToShields;
+                remainingDamage = 0;
+            }
+        } else if (this.currentEnergyShields > 0) {
+            // Shields exist, but no sourceUnit info or sourceUnit has no type (e.g. environmental damage)
+            // Apply damage to shields with 1x effectiveness
+            const damageToDealToShields = remainingDamage; // 1x effectiveness
+            if (damageToDealToShields >= this.currentEnergyShields) {
+                remainingDamage -= this.currentEnergyShields;
+                this.currentEnergyShields = 0;
+            } else {
+                this.currentEnergyShields -= damageToDealToShields;
+                remainingDamage = 0;
+            }
+        }
+
+        // Old HP Shield Logic (if it's still intended to be a separate mechanic)
+        // If energy shields and HP shields are separate pools, this could come after energy shields.
+        // For now, let's assume energy shields are the primary shield mechanic being implemented.
+        // If this.shields refers to the old HP shield:
+        if (remainingDamage > 0 && this.shields > 0) { // this.shields is the old HP-like shield
+            const damageToOldShield = Math.min(remainingDamage, this.shields);
+            this.shields -= damageToOldShield;
+            remainingDamage -= damageToOldShield;
+        }
+
+
+        // Apply any remaining damage to HP
+        if (remainingDamage > 0) {
+            this.hp -= remainingDamage;
+        }
+
+        if (this.hp <= 0) {
+            this.hp = 0;
+            this.isDead = true; // Flag for removal by EntityManager or simulation loop
+            // Actual removal and explosion effects should be handled by EntityManager or main simulation loop
+            // to avoid self-removal issues during iteration.
+            // Example: simulation.entityManager.addEffect(new Effect(this.x, this.y, 'explosion_medium', simulation));
+            // Example: simulation.gameState.addEvent('death', `${this.type.name} destroyed!`);
+        }
+
+
+        // Visual feedback for damage
+        if (damage > 0 && seedRandom && seedRandom.random() < 0.2) { // ensure seedRandom exists
             if (this.hp <= 0) {
-                 // Death is handled by EntityManager
+                // Death caption/effect handled elsewhere or by specific death event
             } else if (this.hp < this.maxHp * 0.3) {
-                entityManager.addCaption(new Caption(this.x, this.y, 'Critical damage!', '#f00', 10));
-            } else if (damage > 30) {
-                entityManager.addCaption(new Caption(this.x, this.y, `${Math.floor(damage)}!`, '#f88', 9));
+                if (entityManager) entityManager.addCaption(new Caption(this.x, this.y, 'Critical damage!', '#f00', 10));
+            } else if (damage > 30) { // Only show big damage numbers
+                if (entityManager) entityManager.addCaption(new Caption(this.x, this.y, `${Math.floor(damage)}!`, '#f88', 9));
             }
         }
     }
@@ -516,13 +654,20 @@ class Unit {
             const currentSpeed = this.getCurrentSpeed(simulation);
             this.vx = Math.cos(this.angle) * currentSpeed;
             this.vy = Math.sin(this.angle) * currentSpeed;
-        } else {
+        } else { // In range
             this.vx = 0;
             this.vy = 0;
-            if (this.cooldown <= 0) {
-                this.attack(this.target, simulation);
-                this.cooldown = this.type.attackSpeed; // This should be time based, e.g., seconds
-                this.lastFireTime = Date.now(); // Still useful for some AI logic, but cooldown is primary for firing
+            if (this.cooldown <= 0 && this.target && this.target.hp > 0) { // Check target validity again
+                const energyCost = this.type.weaponEnergyCost || 0;
+                if (this.currentEnergy >= energyCost) {
+                    this.attack(this.target, simulation); // Actual attack call
+                    this.currentEnergy -= energyCost;     // Consume energy
+                    this.cooldown = this.type.attackSpeed || 1.0; // Reset cooldown (attackSpeed is likely 'fireRate' or similar)
+                    this.lastFireTime = Date.now();
+                } else {
+                    // Insufficient energy, cannot fire. Cooldown does not reset.
+                    // Optional: log low energy: console.log(`Unit ${this.id} low energy for weapon.`);
+                }
             }
         }
     }
