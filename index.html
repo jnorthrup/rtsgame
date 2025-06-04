@@ -176,8 +176,11 @@
     
     <!-- Game HUD -->
     <div class="game-hud">
-        <div>Camera: <span id="camera-pos">0, 0</span> | Zoom: <span id="camera-zoom">1.0</span></div>
-        <div>Controls: WASD to move, Mouse wheel to zoom, Drag to pan</div>
+        <div>Camera: <span id="camera-pos">0, 0</span> | Zoom: <span id="camera-zoom">1.0</span> | Rotation: <span id="camera-rotation">0°</span></div>
+        <div>Team: <span id="camera-team">Blue</span> | Mode: <span id="camera-mode">2D</span> | Strategic: <span id="camera-strategic">No</span></div>
+        <div><strong>SupCom Controls:</strong></div>
+        <div>WASD: Move | Mouse: Drag/Zoom | Q/E: Rotate | Alt: 3D Mode | Home/H: Reset</div>
+        <div>1/2: Switch Team | Shift: Fast | Ctrl: Slow | Edge scroll enabled</div>
     </div>
     
     <!-- Hidden SVG for compatibility -->
@@ -188,6 +191,6 @@
         Initializing simulation...
     </div>
     
-    <script type="module" src="js/app.js"></script>
+    <!-- Script will be injected by HtmlWebpackPlugin -->
 </body>
 </html>

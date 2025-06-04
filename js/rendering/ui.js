@@ -10,7 +10,7 @@ import { UNIT_TYPES } from '../config/unitTypes.js';
 // formatTime is imported from game.js, which requires gameContext.
 // However, updateUI itself will receive gameContext.
 // formatTime itself doesn't need gameContext, only the value to format.
-import { formatTime } from '../../js_rewritten/core/simulation.js'; // Updated import path
+import { formatTime } from '../core/simulation.js'; // Updated import path
 
 export function updateUI(gameContext) {
     const { units, buildings, resources, gameState, camera, UNIT_TYPES: gameContextUnitTypes } = gameContext;
@@ -48,20 +48,33 @@ export function updateUI(gameContext) {
     if (redCommanderEl) redCommanderEl.textContent = redCommander ?
         Math.round(redCommander.hp / redCommander.maxHp * 100) + '%' : 'DESTROYED';
 
-    // Resources - DOM updates for these are now handled by ResourceDisplay.jsx React component
-    /*
-    const blueMassEl = document.getElementById('blueMass');
-    if (blueMassEl) blueMassEl.textContent = Math.floor(resources.blue.mass);
+    // Resources
+    const blueMassEl = document.getElementById('blue-mass');
+    if (blueMassEl) blueMassEl.textContent = Math.floor(resources.blue.mass || 0);
 
-    const blueEnergyEl = document.getElementById('blueEnergy');
-    if (blueEnergyEl) blueEnergyEl.textContent = Math.floor(resources.blue.energy);
+    const blueMassIncomeEl = document.getElementById('blue-mass-income');
+    if (blueMassIncomeEl) blueMassIncomeEl.textContent = Math.floor(resources.blue.massIncome || 0);
 
-    const redMassEl = document.getElementById('redMass');
-    if (redMassEl) redMassEl.textContent = Math.floor(resources.red.mass);
+    const blueEnergyEl = document.getElementById('blue-energy');
+    if (blueEnergyEl) blueEnergyEl.textContent = Math.floor(resources.blue.energy || 0);
 
-    const redEnergyEl = document.getElementById('redEnergy');
-    if (redEnergyEl) redEnergyEl.textContent = Math.floor(resources.red.energy);
-    */
+    const blueEnergyIncomeEl = document.getElementById('blue-energy-income');
+    if (blueEnergyIncomeEl) blueEnergyIncomeEl.textContent = Math.floor(resources.blue.energyIncome || 0);
+
+    const redMassEl = document.getElementById('red-mass');
+    if (redMassEl) redMassEl.textContent = Math.floor(resources.red.mass || 0);
+
+    const redMassIncomeEl = document.getElementById('red-mass-income');
+    if (redMassIncomeEl) redMassIncomeEl.textContent = Math.floor(resources.red.massIncome || 0);
+
+    const redEnergyEl = document.getElementById('red-energy');
+    if (redEnergyEl) redEnergyEl.textContent = Math.floor(resources.red.energy || 0);
+
+    const redEnergyIncomeEl = document.getElementById('red-energy-income');
+    if (redEnergyIncomeEl) redEnergyIncomeEl.textContent = Math.floor(resources.red.energyIncome || 0);
+
+    // SupCom Camera Information
+    updateCameraUI(camera);
 
     // Game time
     const gameTimeEl = document.getElementById('gameTime');
@@ -75,6 +88,52 @@ export function updateUI(gameContext) {
     // FPV mode indicator
     const fpvModeEl = document.getElementById('fpvMode');
     if (fpvModeEl) fpvModeEl.style.display = gameState.fpvMode ? 'block' : 'none';
+}
+
+function updateCameraUI(camera) {
+    // Camera position
+    const cameraPosEl = document.getElementById('camera-pos');
+    if (cameraPosEl) {
+        cameraPosEl.textContent = `${Math.round(camera.x || 0)}, ${Math.round(camera.y || 0)}`;
+    }
+
+    // Camera zoom
+    const cameraZoomEl = document.getElementById('camera-zoom');
+    if (cameraZoomEl) {
+        cameraZoomEl.textContent = (camera.zoom || 1.0).toFixed(2);
+    }
+
+    // Camera rotation
+    const cameraRotationEl = document.getElementById('camera-rotation');
+    if (cameraRotationEl) {
+        cameraRotationEl.textContent = `${Math.round(camera.rotation || 0)}°`;
+    }
+
+    // Camera team (we'll need to get this from the SupCom camera instance)
+    const cameraTeamEl = document.getElementById('camera-team');
+    if (cameraTeamEl) {
+        // Default to blue if no rotation, red if 180 degrees, or current rotation
+        const rotation = camera.rotation || 0;
+        let team = 'Blue';
+        if (rotation > 90 && rotation < 270) {
+            team = 'Red';
+        }
+        cameraTeamEl.textContent = team;
+    }
+
+    // Camera mode (2D/3D)
+    const cameraModeEl = document.getElementById('camera-mode');
+    if (cameraModeEl) {
+        const is3D = (camera.angle || 0) > 0;
+        cameraModeEl.textContent = is3D ? '3D' : '2D';
+    }
+
+    // Strategic mode
+    const cameraStrategicEl = document.getElementById('camera-strategic');
+    if (cameraStrategicEl) {
+        const isStrategic = (camera.zoom || 1.0) < 0.1;
+        cameraStrategicEl.textContent = isStrategic ? 'Yes' : 'No';
+    }
 }
 
 function updateStatusWindow(gameContext) {

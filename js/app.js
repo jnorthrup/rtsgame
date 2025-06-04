@@ -37,16 +37,17 @@ if (!window.gameContext) {
 
 // Import necessary modules
 import { InputManager } from './input/inputManager.js'; // NEW: Import InputManager
+import { SupComCamera } from './input/supcomCamera.js'; // NEW: Import SupCom camera
 
 import { initInputHandling } from './input/inputHandler.js';
 // import { gameLoop, initGame } from './core/game.js'; // OLD: To be replaced
-import { Simulation } from '../js_rewritten/core/simulation.js'; 
+import { Simulation } from './core/simulation.js';
 import { startRandomSeedRecording } from './core/recordingUtils.js';
 import { SIMULATION_CONFIG } from './config/simulationConfig.js';
 import battleJournal from './ai/battleJournal.js'; // Import battleJournal
 import { Effect } from './core/effect.js'; // Import Effect class
 import { Caption } from './core/caption.js'; // Import Caption class
-import { initThreeRenderer } from '../js_rewritten/rendering/threeRenderer.js'; // Import Three.js renderer
+import { initThreeRenderer } from './rendering/threeRenderer.js'; // Import Three.js renderer
 // Minimap functionality removed
 import { updateUI } from './rendering/ui.js'; // NEW: Import updateUI
 
@@ -149,211 +150,24 @@ gameContext.selectionManager = new SelectionManager(gameContext); // Pass gameCo
 gameContext.windowManager = new WindowManager();
 gameContext.allowWindowDrawing = true;
 
-// Keyboard state tracking for advanced camera controls
-const keys = {
-    w: false, a: false, s: false, d: false,
-    q: false, e: false, // For rotation or other controls if needed
-    shift: false, ctrl: false, alt: false
-};
-
-// Camera control functions (adapted from main_simulation.js)
-function handleKeyDown(e) {
-    if (e.code === 'KeyW') keys.w = true;
-    if (e.code === 'KeyA') keys.a = true;
-    if (e.code === 'KeyS') keys.s = true;
-    if (e.code === 'KeyD') keys.d = true;
-    if (e.code === 'KeyQ') keys.q = true; // Example for rotation
-    if (e.code === 'KeyE') keys.e = true; // Example for rotation
-    if (e.key === 'Shift') keys.shift = true;
-    if (e.key === 'Control') keys.ctrl = true;
-    if (e.key === 'Alt') keys.alt = true;
-}
-
-function handleKeyUp(e) {
-    if (e.code === 'KeyW') keys.w = false;
-    if (e.code === 'KeyA') keys.a = false;
-    if (e.code === 'KeyS') keys.s = false;
-    if (e.code === 'KeyD') keys.d = false;
-    if (e.code === 'KeyQ') keys.q = false;
-    if (e.code === 'KeyE') keys.e = false;
-    if (e.key === 'Shift') keys.shift = false;
-    if (e.key === 'Control') keys.ctrl = false;
-    if (e.key === 'Alt') keys.alt = false;
-}
-
-function processKeyboardCameraInput(deltaTime) {
-    const cam = gameContext.camera;
-    const moveSpeed = (KEYBOARD_MOVE_SPEED * deltaTime) / cam.zoom;
-    const rotationSpeed = 60 * deltaTime; // degrees per second
-
-    // WASD movement - always screen relative, never affected by camera rotation
-    if (keys.w) { // Up on screen = negative Y in world
-        cam.targetY -= moveSpeed;
-    }
-    if (keys.s) { // Down on screen = positive Y in world
-        cam.targetY += moveSpeed;
-    }
-    if (keys.a) { // Left on screen = negative X in world
-        cam.targetX -= moveSpeed;
-    }
-    if (keys.d) { // Right on screen = positive X in world
-        cam.targetX += moveSpeed;
-    }
-    
-    // Q/E for rotation around the target point
-    if (keys.q) {
-        cam.targetRotation -= rotationSpeed;
-    }
-    if (keys.e) {
-        cam.targetRotation += rotationSpeed;
-    }
-    
-    // Normalize rotation to stay within 0-360 degrees
-    while (cam.targetRotation < 0) cam.targetRotation += 360;
-    while (cam.targetRotation >= 360) cam.targetRotation -= 360;
-}
-
-function calculateDynamicCameraAngle() {
-    const cam = gameContext.camera;
-    let targetAngle = 0;
-    if (cam.zoom > MAX_STRATEGIC_ZOOM_APP) {
-        targetAngle = 0;
-    } else if (cam.zoom < MIN_TACTICAL_ZOOM_APP) {
-        targetAngle = MAX_TACTICAL_ANGLE_APP;
-    } else {
-        const zoomRange = MIN_TACTICAL_ZOOM_APP - MAX_STRATEGIC_ZOOM_APP;
-        const zoomFactor = (cam.zoom - MAX_STRATEGIC_ZOOM_APP) / zoomRange;
-        targetAngle = MAX_TACTICAL_ANGLE_APP * (1 - zoomFactor);
-    }
-    cam.targetAngle = targetAngle;
-}
-
-function updateCameraLogic(deltaTime) { // Renamed from updateCamera to avoid conflict, added deltaTime
-    const cam = gameContext.camera;
-    processKeyboardCameraInput(deltaTime);
-    calculateDynamicCameraAngle();
-
-    if (!cam.isDragging) {
-        cam.targetX += cam.velocityX / cam.zoom;
-        cam.targetY += cam.velocityY / cam.zoom; //velocityY was positive in main_simulation, but typically Y is inverted for screen
-        cam.velocityX *= MOMENTUM_DECAY;
-        cam.velocityY *= MOMENTUM_DECAY;
-    }
-
-    // Reduce smoothing during dragging for immediate response
-    const smoothingFactor = cam.isDragging ? 1.0 : CAMERA_SMOOTHING;
-    cam.x += (cam.targetX - cam.x) * smoothingFactor;
-    cam.y += (cam.targetY - cam.y) * smoothingFactor;
-    cam.zoom += (cam.targetZoom - cam.zoom) * CAMERA_SMOOTHING;
-    cam.angle += (cam.targetAngle - cam.angle) * CAMERA_SMOOTHING;
-    cam.rotation += (cam.targetRotation - cam.rotation) * CAMERA_SMOOTHING;
-    
-    // Normalize current rotation to stay within 0-360 degrees
-    while (cam.rotation < 0) cam.rotation += 360;
-    while (cam.rotation >= 360) cam.rotation -= 360;
-
-    // Clamp zoom
-    cam.zoom = Math.max(MIN_ZOOM_APP, Math.min(MAX_ZOOM_APP, cam.zoom));
-    cam.targetZoom = Math.max(MIN_ZOOM_APP, Math.min(MAX_ZOOM_APP, cam.targetZoom));
-
-
-    if (gameContext.renderer && gameContext.renderer.updateCamera) { // Check if renderer and its method exist
-         gameContext.renderer.updateCamera(cam); // This was called in main_simulation's updateCamera
-    }
-}
-
-
-function handleMouseWheel(e) {
-    e.preventDefault();
-    const cam = gameContext.camera;
-    const zoomFactor = e.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-    const newZoom = cam.targetZoom * zoomFactor;
-
-    if (newZoom >= MIN_ZOOM_APP && newZoom <= MAX_ZOOM_APP) {
-        const rect = gameContext.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
-        // Simple screen-to-world projection for zoom-to-cursor
-        const worldXBeforeZoom = (mouseX - cam.canvasWidth / 2) / cam.zoom + cam.x;
-        const worldYBeforeZoom = (mouseY - cam.canvasHeight / 2) / cam.zoom + cam.y;
-        
-        cam.targetZoom = newZoom;
-        
-        // Adjust camera position to keep mouse cursor over the same world point
-        const worldXAfterZoom = (mouseX - cam.canvasWidth / 2) / cam.targetZoom + cam.x;
-        const worldYAfterZoom = (mouseY - cam.canvasHeight / 2) / cam.targetZoom + cam.y;
-        
-        cam.targetX += worldXBeforeZoom - worldXAfterZoom;
-        cam.targetY += worldYBeforeZoom - worldYAfterZoom;
-    }
-}
-
-function handleMouseDown(e) {
-    if (e.button === 0) { // Left mouse button for dragging
-        gameContext.camera.isDragging = true;
-        gameContext.camera.lastMouseX = e.clientX;
-        gameContext.camera.lastMouseY = e.clientY;
-        gameContext.camera.velocityX = 0;
-        gameContext.camera.velocityY = 0;
-        if(gameContext.canvas) gameContext.canvas.style.cursor = 'grabbing';
-    } else if (e.button === 2) { // Right mouse button for rotation (example)
-        // Could also set a flag for rotation dragging if desired
-    }
-}
-
-function handleMouseMove(e) {
-    const cam = gameContext.camera;
-    if (cam.isDragging) {
-        const deltaX = e.clientX - cam.lastMouseX;
-        const deltaY = e.clientY - cam.lastMouseY;
-        
-        // Direct screen-to-world mapping adjusted for precise dragging
-        // Account for canvas dimensions to ensure land under pointer moves with it
-        const rect = gameContext.canvas.getBoundingClientRect();
-        const scaleFactor = 1 / cam.zoom;
-        const worldDeltaX = deltaX * scaleFactor;
-        const worldDeltaY = deltaY * scaleFactor;
-        
-        cam.targetX -= worldDeltaX;
-        cam.targetY += worldDeltaY; // Invert Y-axis for intuitive top-down drag (mouse down drags view down)
-        
-        // Minimize momentum during drag for immediate response
-        cam.velocityX = 0;
-        cam.velocityY = 0;
-
-        cam.lastMouseX = e.clientX;
-        cam.lastMouseY = e.clientY;
-    }
-}
-
-function handleMouseUp(e) {
-    if (e.button === 0) {
-        gameContext.camera.isDragging = false;
-        if(gameContext.canvas) gameContext.canvas.style.cursor = 'grab';
-    }
-}
+// Initialize SupCom camera (will be done after renderer is ready)
+let supcomCamera = null;
 
 
 // Initialize input handling and start the game
 (async () => {
+try {
 if (!gameContext.HEADLESS_MODE) {
+    console.log("Initializing Three.js renderer...");
     gameContext.renderer = await initThreeRenderer(gameContext.canvas); // New asynchronous call
     console.log("Three.js renderer initialized asynchronously.");
 
     // initInputHandling(gameContext); // Old input handling - review if it conflicts or can be merged/removed
                                    // For now, new handlers will be added.
     
-    // Add new event listeners for advanced camera
-    if (gameContext.canvas) {
-        gameContext.canvas.addEventListener('wheel', handleMouseWheel, { passive: false });
-        gameContext.canvas.addEventListener('mousedown', handleMouseDown);
-        gameContext.canvas.addEventListener('mousemove', handleMouseMove);
-        gameContext.canvas.addEventListener('mouseup', handleMouseUp);
-        gameContext.canvas.addEventListener('mouseleave', handleMouseUp); // Stop dragging if mouse leaves canvas
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
+    // Initialize SupCom camera system
+    supcomCamera = new SupComCamera(gameContext);
+    console.log("SupCom camera system initialized");
     
     // NEW: Clear all existing windows on game launch when not in headless mode
     if (gameContext.windowManager && Array.isArray(gameContext.windowManager.windows)) {
@@ -427,8 +241,10 @@ if (!gameContext.HEADLESS_MODE) {
             }
         }
 
-        // Update camera logic (smoothing, keyboard/mouse input)
-        updateCameraLogic(deltaTime);  // Ensure camera updates after potential adjustments
+        // Update SupCom camera system
+        if (supcomCamera) {
+            supcomCamera.update(deltaTime);
+        }
 
 
         // Update the simulation state
@@ -479,5 +295,16 @@ if (!gameContext.HEADLESS_MODE) {
         requestAnimationFrame(animate);
     }
     requestAnimationFrame(animate);
+}
+} catch (error) {
+    console.error("Error during initialization:", error);
+    
+    // Hide loading overlay even on error
+    const loadingOverlay = document.getElementById('loading');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
+        loadingOverlay.innerHTML = '<div style="color: red;">Error loading game. Please refresh the page.</div>';
+        loadingOverlay.style.display = 'block';
+    }
 }
 })(); // Close the async IIFE

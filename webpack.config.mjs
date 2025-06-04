@@ -92,7 +92,7 @@ export default {
       }
     ],
     compress: true,
-    port: 9001,
+    port: 9002,
     hot: true,
     open: true,
     historyApiFallback: true,

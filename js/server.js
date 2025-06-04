@@ -1,47 +1,26 @@
-// ####################################################################################################
-// #                                                                                                  #
-// #   DEPRECATED FILE: This entire file is deprecated and scheduled for deletion.                    #
-// #   Static file serving for the application is now handled by the Express server at the            #
-// #   project root (server.js). That server is more robust and serves all necessary assets.          #
-// #                                                                                                  #
-// ####################################################################################################
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const server = http.createServer((req, res) => {
-    let filePath = '.' + req.url;
-    if (filePath === './') filePath = './index.html';
-    
-    const extname = path.extname(filePath);
-    let contentType = 'text/html';
-    switch (extname) {
-        case '.js':
-            contentType = 'text/javascript';
-            break;
-        case '.css':
-            contentType = 'text/css';
-            break;
-    }
+const app = express();
+const port = 8080;
 
-    fs.readFile(filePath, (err, content) => {
-        if (err) {
-            if (err.code === 'ENOENT') {
-                res.writeHead(404);
-                res.end('File not found');
-            } else {
-                res.writeHead(500);
-                res.end('Server error');
-            }
-        } else {
-            res.writeHead(200, { 'Content-Type': contentType });
-            res.end(content, 'utf-8');
-        }
-    });
+// Enable CORS for all routes
+app.use(cors());
+
+// Serve static files from the current directory
+app.use(express.static(__dirname));
+
+// Default route to serve index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const PORT = 3000;
-server.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}/`);
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+    console.log(`Serving static files from: ${__dirname}`);
 });

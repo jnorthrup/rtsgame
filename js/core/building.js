@@ -58,7 +58,6 @@ class Building {
     update(simulation, deltaTime) {
         const { entityManager, gameState, seedRandom } = simulation; // Destructure main components from simulation
         const { resources, addEvent } = gameState;
-        const { addUnit } = entityManager;
 
         // Resource generation
         if (this.type.resourceGeneration) {
@@ -101,7 +100,7 @@ class Building {
             if (this.productionProgress >= this.productionQueue[0].buildTime) {
                 const unitType = this.productionQueue.shift();
                 const newUnit = new Unit(this.rallyx, this.rallyy, this.team, unitType, simulation);
-                addUnit(newUnit);
+                entityManager.addUnit(newUnit);
                 this.productionProgress = 0;
 
                 entityManager.addCaption(new Caption(this.x, this.y - this.type.size,

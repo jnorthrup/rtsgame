@@ -399,9 +399,9 @@ class Unit {
 
 
     performSupportRole(simulation, deltaTime) { // Renamed gameContext, added deltaTime
-        const { entityManager, gameState, seedRandom } = simulation;
+        const { entityManager, gameState, seedRandom, resources } = simulation;
         const { units, buildings, addBuilding, addCaption } = entityManager;
-        const { resources, addEvent } = gameState;
+        const { addEvent } = gameState;
         const { resourceNodes } = simulation.gameContext; // Assuming resourceNodes on original gameContext
 
         if (this.type === UNIT_TYPES.commander) {
