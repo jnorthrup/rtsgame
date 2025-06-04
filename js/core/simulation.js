@@ -1,4 +1,4 @@
-// js_rewritten/core/simulation.js
+// js/core/simulation.js
 
 // ####################################################################################################
 // # CONCEPTUAL REDUX/COMMAND PATTERN REFACTOR NOTES:                                                 #

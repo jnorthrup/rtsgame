@@ -40,13 +40,13 @@ import { InputManager } from './input/inputManager.js'; // NEW: Import InputMana
 
 import { initInputHandling } from './input/inputHandler.js';
 // import { gameLoop, initGame } from './core/game.js'; // OLD: To be replaced
-import { Simulation } from '../js_rewritten/core/simulation.js'; 
+import { Simulation } from './core/simulation.js';
 import { startRandomSeedRecording } from './core/recordingUtils.js';
 import { SIMULATION_CONFIG } from './config/simulationConfig.js';
 import battleJournal from './ai/battleJournal.js'; // Import battleJournal
 import { Effect } from './core/effect.js'; // Import Effect class
 import { Caption } from './core/caption.js'; // Import Caption class
-import { initThreeRenderer } from '../js_rewritten/rendering/threeRenderer.js'; // Import Three.js renderer
+import { initThreeRenderer } from './rendering/threeRenderer.js'; // Import Three.js renderer
 // Minimap functionality removed
 import { updateUI } from './rendering/ui.js'; // NEW: Import updateUI
 

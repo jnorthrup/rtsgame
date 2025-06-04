@@ -10,7 +10,7 @@ import { UNIT_TYPES } from '../config/unitTypes.js';
 // formatTime is imported from game.js, which requires gameContext.
 // However, updateUI itself will receive gameContext.
 // formatTime itself doesn't need gameContext, only the value to format.
-import { formatTime } from '../../js_rewritten/core/simulation.js'; // Updated import path
+import { formatTime } from '../core/simulation.js'; // Updated import path
 
 export function updateUI(gameContext) {
     const { units, buildings, resources, gameState, camera, UNIT_TYPES: gameContextUnitTypes } = gameContext;

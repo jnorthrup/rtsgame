@@ -107,7 +107,6 @@ export default {
       '@core': path.resolve(__dirname, 'js/core'),
       '@ai': path.resolve(__dirname, 'js/ai'),
       '@ui': path.resolve(__dirname, 'js/ui'),
-      '@rewritten': path.resolve(__dirname, 'js_rewritten'),
     }
   },
   optimization: {

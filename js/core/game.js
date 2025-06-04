@@ -2,7 +2,7 @@
 // ####################################################################################################
 // #                                                                                                  #
 // #   DEPRECATED FILE: This entire file is deprecated and scheduled for deletion.                    #
-// #   Core simulation logic has been moved to js_rewritten/core/simulation.js.                       #
+// #   Core simulation logic is in js/core/simulation.js.                                             #
 // #   UI, rendering, and main loop control should be handled by their respective modules.            #
 // #                                                                                                  #
 // ####################################################################################################

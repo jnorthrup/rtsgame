@@ -3,13 +3,13 @@
 // Battle Simulation Engine - Improve Customer Experience Through Data Analysis
 // Run hundreds of battles to identify gameplay issues and balance problems
 
-import { UNIT_TYPES } from './js/config/unitTypes.js';
-import { BUILDING_TYPES } from './js/config/buildingTypes.js';
-import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from './js/config/gameConstants.js';
-import { Unit } from './js/core/unit.js';
-import { Building } from './js/core/building.js';
-import { generateTerrain } from './js/core/terrainManager.js';
-import { findLandPosition } from './js/core/terrain.js';
+import { UNIT_TYPES } from './config/unitTypes.js';
+import { BUILDING_TYPES } from './config/buildingTypes.js';
+import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from './config/gameConstants.js';
+import { Unit } from './core/unit.js';
+import { Building } from './core/building.js';
+import { generateTerrain } from './core/terrainManager.js';
+import { findLandPosition } from './core/terrain.js';
 
 class BattleSimulator {
     constructor() {

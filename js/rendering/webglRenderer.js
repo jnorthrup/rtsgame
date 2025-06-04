@@ -1,4 +1,4 @@
-// js_rewritten/rendering/webglRenderer.js
+// js/rendering/webglRenderer.js
 
 /**
  * WebGL Renderer for the RTS Game

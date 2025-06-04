@@ -1,4 +1,4 @@
-// js_rewritten/rendering/threeRenderer.js - Simplified and perfected Three.js renderer
+// js/rendering/threeRenderer.js - Simplified and perfected Three.js renderer
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';

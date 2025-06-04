@@ -33,7 +33,6 @@ const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 const compilerOptions = {
   ...config,
   js: [
-    'js_rewritten/**/*.js',
     'js/**/*.js',
     '!js/**/node_modules/**',
     '!**/test/**',

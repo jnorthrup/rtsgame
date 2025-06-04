@@ -1,4 +1,4 @@
-// js_rewritten/config/modelDefaults.js
+// js/config/modelDefaults.js
 
 /**
  * Default configurations for 3D models and entity settings.
