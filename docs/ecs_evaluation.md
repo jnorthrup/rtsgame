@@ -71,11 +71,11 @@ This approach is the most pragmatic for the current state of the project:
 3.  **Integrate with Command/Reducer Pattern:** The ongoing Redux-like refactor is highly compatible with ECS principles.
     *   `GameCommands` trigger state changes.
     *   Reducers (using Immer.js) act like systems, taking current component data and a command, and producing the next state for those components.
-    *   The central state store will hold the "component data" for all entities. Entities themselves might just be IDs.
-4.  **Focus on Logic Separation and Data Flow:** The primary benefit initially will be cleaner, more testable code, and better state management that supports determinism and replays via the BattleJournal logging commands.
-5.  **Defer Full ECS Data Layout:** A shift to a library like `bitecs` (which manages raw array buffers for components) can be considered much later if performance becomes a critical bottleneck that this approach cannot solve. The current JavaScript object/class overhead is acceptable for now.
+    *   The central state store will hold the "component data" for all entities. Entities themselves might just be IDs, which can serve as indices or coordinates within TrikeShed's `Series` or `Tensor` structures that would store the actual component data. This aligns with TrikeShed's tensor-based system, which is a specific and powerful form of data-oriented design.
+4.  **Focus on Logic Separation and Data Flow:** The primary benefit initially will be cleaner, more testable code, and better state management that supports determinism (a key goal of TrikeShed) and replays via the BattleJournal logging commands. The use of Immer.js for immutable updates directly supports TrikeShed's principles of deterministic simulation and idempotent data.
+5.  **Defer Full ECS Data Layout (External Libraries):** A shift to a specialized ECS library like `bitecs` (which manages raw array buffers for components) can be considered much later if performance becomes a critical bottleneck. However, TrikeShed's `Series` and `Tensor` primitives, especially if backed by JavaScript TypedArrays where appropriate, offer a native pathway to achieving similar cache-friendly, structured component data management that is inherently compatible with the existing architecture.
 
-This incremental approach allows the project to gain benefits of ECS (decoupling, data-oriented logic, testability) without the high cost of a complete rewrite, and it aligns well with the Redux-like state management already being introduced.
+This incremental approach, leveraging TrikeShed's data-oriented primitives where possible for component storage and system logic, allows the project to gain benefits of ECS (decoupling, data-oriented logic, testability) without the high cost of a complete rewrite. It strongly aligns with the Redux-like state management already being introduced and the core deterministic principles of the TrikeShed architecture.
 
 ---
 This document will be saved as `docs/ecs_evaluation.md`.

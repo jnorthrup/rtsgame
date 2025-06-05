@@ -111,7 +111,7 @@ This analysis examines the player progression pathway from solo commander gamepl
 
 **Tier 3 Units** (Experimental Forces):
 
-- **Experimental**: 500M/400E, 500HP, 100 damage, 200 shields
+- **Experimental**: 500M/400E, **150C** (Computronium, example cost), 500HP, 100 damage, 200 shields. (Note: Computronium is a Tier 1 resource as per GDD 4.1, essential for AI cores, C&C nodes, etc. High-tier units would logically require it, see GDD 6.2 `computroniumCoreLevel`).
 
 ### Economic Thresholds for Progression
 
@@ -134,9 +134,10 @@ This analysis examines the player progression pathway from solo commander gamepl
 **Factory Hierarchy**:
 
 1. **Land Factory**: 200M/100E → Basic ground units
-2. **Advanced Land Factory**: 400M/300E → Experimental units
+2. **Advanced Land Factory**: 400M/300E, **100C** (Computronium, example cost) → Experimental units (likely requiring high `computroniumCoreLevel`).
 3. **Air Factory**: 150M/120E → Air superiority units
 4. **Naval Factory**: 250M/150E → Maritime control units
+(Note: Factories producing units with significant AI/C&C capabilities or requiring Computronium for construction should also have Computronium in their costs or as an operational upkeep if not directly in unit costs.)
 
 **Resource Infrastructure Scaling**:
 
@@ -230,9 +231,9 @@ This analysis examines the player progression pathway from solo commander gamepl
 **Advancement Barriers**:
 
 1. **Factory Prerequisites**: Advanced units require specific infrastructure
-2. **Resource Scaling**: Exponential cost increases for tier 3 units
-3. **Time Delays**: Long build times create strategic windows of vulnerability
-4. **Opportunity Costs**: Advanced unit investment risks economic development
+**Resource Scaling**: Exponential cost increases for tier 3 units, including significant Computronium requirements (GDD 4.1, 12.1 "Computronium & AI" research).
+3. **Time Delays**: Long build times create strategic windows of vulnerability.
+4. **Opportunity Costs**: Investment in advanced units and Computronium production/research diverts resources from immediate army size.
 
 ## Macro Complexity Mitigation Strategies
 

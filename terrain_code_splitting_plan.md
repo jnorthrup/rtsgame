@@ -70,3 +70,11 @@ graph TD
 *   **Flexibility:** Different "continents" (terrain types) can be selected via configuration.
 *   **Browser/Simulator Parity:** Both environments can use the same terrain manager to load different generators, allowing for "mixing and matching."
 *   **Maintainability:** Clear separation of concerns.
+
+## Future Considerations & TrikeShed Alignment:
+
+The `terrain` grid produced by these modular generators provides a flexible base for the game's map. For runtime simulation and to align with the "TrikeShed" data architecture (GDD Section 10), this grid data can be:
+*   Used as the source to construct TrikeShed `Tensor` objects (e.g., a `TensorCursor<TerrainTileData>`). This would allow terrain data to be integrated into the deterministic, tensor-based state management if desired.
+*   Structured to support the "Dynamic World" GDD pillar, where terrain is a consumable resource and can be visibly changed. The `TerrainTileData` within the grid (and thus the Tensor) would need to hold mutable properties like `depletionLevel` or `currentHeight`, which can be updated immutably using patterns compatible with TrikeShed's deterministic nature (e.g., via reducers with Immer.js, as discussed in `docs/ecs_evaluation.md`).
+
+This plan ensures that the initial terrain setup is modular and adaptable, while also paving the way for its integration into the advanced data handling capabilities of TrikeShed for dynamic game world simulation.

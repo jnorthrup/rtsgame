@@ -17,7 +17,8 @@ This implementation guide provides detailed technical specifications for enhanci
 this.baseAuthority = this.calculateBaseAuthority();
 this.healthAuthorityModifier = 0;
 this.veterancyAuthorityModifier = 0;
-this.contextAuthorityModifier = 0;
+this.contextAuthorityModifier = 0; // For situational bonuses like defensive stances, mission objectives
+this.computroniumAuthorityModifier = 0; // For C&C capabilities derived from Computronium core level/focus
 this.effectiveAuthority = this.baseAuthority;
 
 // Veterancy tracking
@@ -85,11 +86,17 @@ calculateEffectiveAuthority() {
         this.veterancyAuthorityModifier = 0;
     }
     
+    // Placeholder for Computronium-based C&C modifier calculation
+    // This would depend on this.computroniumCoreLevel and potentially this.coreFocusMode (see GDD 6.4)
+    // Example: if (this.coreFocusMode === 'C&C_MERCURY') this.computroniumAuthorityModifier = 5;
+    // else this.computroniumAuthorityModifier = this.computroniumCoreLevel * 1; // Simplified example
+
     // Calculate final effective authority
-    this.effectiveAuthority = this.baseAuthority + 
-                            this.healthAuthorityModifier + 
-                            this.veterancyAuthorityModifier + 
-                            this.contextAuthorityModifier;
+    this.effectiveAuthority = this.baseAuthority +
+                            this.healthAuthorityModifier +
+                            this.veterancyAuthorityModifier +
+                            this.contextAuthorityModifier +
+                            this.computroniumAuthorityModifier; // Added Computronium modifier
     
     return this.effectiveAuthority;
 }
