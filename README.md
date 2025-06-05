@@ -1,6 +1,8 @@
 # rtsgame
 https://jnorthrup.github.io/rtsgame
 
+This project is a Real-Time Strategy game built around the "TrikeShed" deterministic data architecture and "Computronium" resource/AI patterns, as detailed in `docs/the-rts-concepts.md`.
+
 ⏺ Looking at the high-performance inner loop design I created, here's the stratification of game data for optimal cache locality:
 
 Data Stratification Layers
@@ -18,6 +20,12 @@ Locality Strategy:
 - Spatial Locality: Entities grouped by 64x64 world regions
 - Temporal Locality: Hot data (entity counts) in separate Uint16Array
 - Access Pattern: Linear traversal of 3x3 neighborhoods with precomputed offsets
+
+These cache optimization strategies and memory layouts are crucial for the performance of the "TrikeShed" architecture. "TrikeShed" (detailed in `src/trikeshed/core.ts` and `docs/the-rts-concepts.md#10-data-architecture--determinism-trikeshed`) relies on efficient processing of tensor-based data structures, and these optimizations are key to achieving deterministic simulation at scale.
+
+"Computronium" (see `docs/the-rts-concepts.md#64-computronium-cores--dining-philosophers-resource-allocation`) is a core concept for advanced unit AI and resource management, and the engine's performance allows for the complex calculations this entails.
+
+The project also leverages principles of immutable state management, aligning with the determinism goals of "TrikeShed." As suggested in `docs/ecs_evaluation.md`, Immer.js is utilized as a tool that facilitates this, making state changes predictable and easier to track.
 
 2. Batch Processing Layer (batchProcessor.js)
 

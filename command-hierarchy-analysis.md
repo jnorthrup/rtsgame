@@ -61,6 +61,14 @@ Health Authority Modifier:
 - <20% HP: -10 authority, cannot command
 ```
 
+#### Computronium Core Influence (Placeholder)
+A unit's `computroniumCoreLevel` (see GDD 6.2, 6.4) and its current "Core Focus Mode" (GDD 6.4.1), particularly if set to "C&C (Mercury)", should significantly influence its command capabilities. This could be factored into `baseAuthority` or as a `computroniumAuthorityModifier`. Higher core levels or a dedicated C&C focus could enhance:
+- Speed and security of C&C communications (e.g., PoW validation capacity, GDD 9.1).
+- Number of subordinate units effectively managed.
+- Access to advanced tactical calculations or predictive C&C AI (GDD 8.2).
+- Effectiveness of command auras (GDD 8.1).
+This modifier is TBD but should be considered in the `effectiveAuthority` calculation.
+
 #### Veterancy Bias System
 
 ```
@@ -115,6 +123,7 @@ Veterancy Levels:
 - **Economic Missions**: +3 authority for support units
 - **Defensive Positions**: +2 authority for stationary units
 - **Emergency Situations**: +5 authority for healthy units
+- **Computronium-Enhanced C&C**: Units with superior `computroniumCoreLevel` or those in "C&C (Mercury)" focus mode (GDD 6.4.1) might receive a bonus to their authority when C&C tasks are paramount, or their `contextAuthorityModifier` could be adjusted accordingly. This reflects their enhanced capacity for information processing, PoW validation, and managing command data.
 
 ## Scalability Solutions
 
