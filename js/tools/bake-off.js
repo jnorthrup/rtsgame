@@ -1,3 +1,11 @@
+// ####################################################################################################
+// #                                                                                                  #
+// #   DEPRECATED FILE: This bundler bake-off script is deprecated and scheduled for deletion.        #
+// #   The project has standardized on Webpack as the sole bundler.                                   #
+// #   This comparison is no longer relevant for active development.                                  #
+// #                                                                                                  #
+// ####################################################################################################
+
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
