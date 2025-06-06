@@ -2,8 +2,8 @@
 import { SIMULATION_CONFIG } from '../config/simulationConfig.js';
 import { initializeRecordingSystem, startRandomSeedRecording } from './recordingUtils.js';
 import battleJournal from '../ai/battleJournal.js';
-import { Effect } from './effect.js';
-import { Caption } from './caption.js';
+import { Effect } from './entities/effect.js';
+import { Caption } from './entities/caption.js';
 
 export class GameContextManager {
     constructor() {

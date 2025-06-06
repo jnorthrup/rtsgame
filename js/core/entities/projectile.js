@@ -1,5 +1,5 @@
 // js/core/projectile.js
-import { TILE_SIZE, GRID_SIZE, WORLD_SIZE } from '../config/gameConstants.js'; // If needed for drawing or physics
+import { TILE_SIZE, GRID_SIZE, WORLD_SIZE } from '../../config/gameConstants.js'; // If needed for drawing or physics
 // Effect constructor will be passed via gameContext in its update or on impact.
 
 class GrenadeProjectile {

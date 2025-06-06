@@ -1,5 +1,5 @@
 import { TerrainManager } from './terrainManager.js';
-import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+import { WORLD_SIZE, TILE_SIZE, GRID_SIZE } from '../config/gameConstants.js';
 
 const TERRAIN_TYPES = {
     GRASS: { color: '#4CAF50', walkable: true, buildable: true },
@@ -357,5 +357,54 @@ export function isBuildable(terrain, x, y) {
     }
     
     return terrain[gridY][gridX].buildable;
+}
+
+// Standalone findLandPosition function for AI use
+export function findLandPosition(gameContext, x, y, radius) {
+    if (!gameContext.terrain?.terrain) {
+        return null;
+    }
+    
+    let attempts = 0;
+    const maxAttempts = 100;
+    
+    while (attempts < maxAttempts) {
+        const testX = Math.floor(gameContext.seedRandom.random() * GRID_SIZE);
+        const testY = Math.floor(gameContext.seedRandom.random() * GRID_SIZE);
+        
+        // Check if area around this position is clear
+        let clear = true;
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                const checkX = testX + dx;
+                const checkY = testY + dy;
+                
+                if (checkX < 0 || checkX >= GRID_SIZE || checkY < 0 || checkY >= GRID_SIZE) {
+                    clear = false;
+                    break;
+                }
+                
+                const terrainType = gameContext.terrain.terrain[checkY][checkX];
+                const properties = gameContext.terrain.terrainManager.getTerrainProperties(terrainType);
+                
+                if (!properties.buildable) {
+                    clear = false;
+                    break;
+                }
+            }
+            if (!clear) break;
+        }
+        
+        if (clear) {
+            return {
+                x: testX * TILE_SIZE,
+                y: testY * TILE_SIZE
+            };
+        }
+        
+        attempts++;
+    }
+    
+    return null;
 }
 

@@ -9,7 +9,7 @@ import { BUILDING_TYPES } from '../config/buildingTypes.js';
 import { UNIT_TYPES } from '../config/unitTypes.js';
 import { findLandPosition } from '../core/terrain.js';
 import { Building } from '../core/building.js';
-import { Caption } from '../core/caption.js';
+import { Caption } from '../core/entities/caption.js';
 // Removed incorrect import of battleJournal. It will be accessed via gameContext (simulation instance).
 
 // AI personality profiles for varied gameplay

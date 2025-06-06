@@ -381,6 +381,7 @@ export class ComputroniumManager {
         
         const recent = this.generationHistory.slice(-10);
         const avgGeneration = recent.reduce((sum, entry) => sum + entry.generated, 0) / recent.length;
+        const activeCores = this.cores.filter(c => c.isActive).length;
         
         return {
             currentRate: avgGeneration,

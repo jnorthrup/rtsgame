@@ -2346,4 +2346,227 @@ export class EnhancedCommandHierarchy {
             this.checkFieldCommanderNeeds(node);
         }
     }
+
+    /**
+     * Calculate position value for tactical analysis
+     * @param {Unit} unit - Unit to analyze
+     * @returns {number} Position value (0-1)
+     */
+    calculatePositionValue(unit) {
+        let value = 0.5; // Base value
+        
+        // Height advantage (simplified)
+        if (unit.elevation && unit.elevation > 0) {
+            value += 0.1;
+        }
+        
+        // Cover and concealment (simplified)
+        if (unit.inCover) {
+            value += 0.2;
+        }
+        
+        return Math.min(1.0, value);
+    }
+
+    /**
+     * Calculate strategic importance of a position
+     * @param {CommandNode} node - Command node
+     * @returns {number} Strategic importance (0-1)
+     */
+    calculateStrategicImportance(node) {
+        let importance = 0.3; // Base importance
+        
+        // Near resource nodes
+        const nearbyResources = this.findNearbyUnits(node.entity, 200)
+            .filter(u => u.type && u.type.isResourceNode);
+        importance += nearbyResources.length * 0.1;
+        
+        // Near chokepoints or strategic positions
+        if (this.isNearChokepoint(node.entity)) {
+            importance += 0.3;
+        }
+        
+        return Math.min(1.0, importance);
+    }
+
+    /**
+     * Calculate resource control value
+     * @param {CommandNode} node - Command node
+     * @returns {number} Resource control value (0-1)
+     */
+    calculateResourceControl(node) {
+        let control = 0;
+        
+        // Count controlled resource nodes nearby
+        const controlledResources = this.findNearbyUnits(node.entity, 300)
+            .filter(u => u.type && u.type.isResourceNode && u.team === node.entity.team);
+        
+        control = Math.min(1.0, controlledResources.length * 0.2);
+        
+        return control;
+    }
+
+    /**
+     * Check if unit is near a chokepoint
+     * @param {Unit} unit - Unit to check
+     * @returns {boolean} True if near chokepoint
+     */
+    isNearChokepoint(unit) {
+        // Simplified chokepoint detection
+        return false; // Would need terrain analysis for real implementation
+    }
+
+    /**
+     * Find flanking opportunities
+     * @param {CommandNode} node - Command node
+     * @returns {Array} Array of flanking opportunities
+     */
+    findFlankingOpportunities(node) {
+        return []; // Simplified implementation
+    }
+
+    /**
+     * Find resource opportunities
+     * @param {CommandNode} node - Command node
+     * @returns {Array} Array of resource opportunities
+     */
+    findResourceOpportunities(node) {
+        return []; // Simplified implementation
+    }
+
+    /**
+     * Find defensive opportunities
+     * @param {CommandNode} node - Command node
+     * @returns {Array} Array of defensive opportunities
+     */
+    findDefensiveOpportunities(node) {
+        return []; // Simplified implementation
+    }
+
+    /**
+     * Calculate computronium needs
+     * @param {CommandNode} node - Command node
+     * @param {Object} predictions - Predictions
+     * @returns {number} Computronium needed
+     */
+    calculateComputroniumNeeds(node, predictions) {
+        let needs = 0;
+        
+        // Base needs for subordinates
+        needs += node.subordinates.length * 0.1;
+        
+        // Additional needs for threats
+        needs += predictions.threatPredictions.length * 0.5;
+        
+        return needs;
+    }
+
+    /**
+     * Calculate energy needs
+     * @param {CommandNode} node - Command node
+     * @param {Object} predictions - Predictions
+     * @returns {number} Energy needed
+     */
+    calculateEnergyNeeds(node, predictions) {
+        return node.subordinates.length * 2; // Simplified
+    }
+
+    /**
+     * Calculate material needs
+     * @param {CommandNode} node - Command node
+     * @param {Object} predictions - Predictions
+     * @returns {number} Materials needed
+     */
+    calculateMaterialNeeds(node, predictions) {
+        return node.subordinates.length * 1.5; // Simplified
+    }
+
+    /**
+     * Apply tactical recommendations
+     * @param {CommandNode} node - Command node
+     * @param {Object} predictions - Predictions
+     */
+    applyTacticalRecommendations(node, predictions) {
+        // Apply recommended actions based on analysis
+        for (const recommendation of predictions.recommendedActions) {
+            if (recommendation.priority === 'HIGH') {
+                this.executeRecommendation(node, recommendation);
+            }
+        }
+    }
+
+    /**
+     * Execute a tactical recommendation
+     * @param {CommandNode} node - Command node
+     * @param {Object} recommendation - Recommendation to execute
+     */
+    executeRecommendation(node, recommendation) {
+        console.log(`[C&C] Executing ${recommendation.type} recommendation: ${recommendation.action}`);
+        // Implementation would depend on recommendation type
+    }
+
+    /**
+     * Handle command chain issues
+     * @param {CommandNode} node - Command node
+     * @param {Object} validation - Validation results
+     */
+    handleCommandChainIssues(node, validation) {
+        console.warn(`[C&C] Command chain issues for ${node.entity.type}:`, validation.issues);
+        
+        // Apply recommendations
+        for (const recommendation of validation.recommendations) {
+            console.log(`[C&C] Recommendation: ${recommendation}`);
+        }
+    }
+
+    /**
+     * Get command node for an entity
+     * @param {Unit} entity - Entity to get node for
+     * @returns {CommandNode} Command node or null
+     */
+    getCommandNode(entity) {
+        return this.commandNodes.get(entity.id) || null;
+    }
+
+    /**
+     * Consider promoting a node
+     * @param {CommandNode} node - Node to consider for promotion
+     */
+    considerPromotion(node) {
+        if (node.rank < 5 && node.subordinates.length > this.calculateMaxSubordinates(node) * 0.9) {
+            this.promoteNode(node);
+        }
+    }
+
+    /**
+     * Consider demoting a node
+     * @param {CommandNode} node - Node to consider for demotion
+     */
+    considerDemotion(node) {
+        if (node.rank > 1 && node.subordinates.length < this.calculateMaxSubordinates(node) * 0.1) {
+            node.rank = Math.max(1, node.rank - 1);
+            console.log(`[C&C] ${node.entity.type} demoted to rank ${node.rank}`);
+        }
+    }
+
+    /**
+     * Check if field commander is needed
+     * @param {CommandNode} supremeNode - Supreme commander node
+     */
+    checkFieldCommanderNeeds(supremeNode) {
+        if (supremeNode.subordinates.length > 20) {
+            console.log(`[C&C] Supreme commander overloaded, need field commanders`);
+            // Would implement field commander creation logic
+        }
+    }
+
+    /**
+     * Create a command node
+     * @param {Unit} entity - Entity for the node
+     * @param {number} rank - Command rank
+     * @returns {CommandNode} Created command node
+     */
+    createCommandNode(entity, rank) {
+        return new CommandNode(entity, rank);
+    }
 }

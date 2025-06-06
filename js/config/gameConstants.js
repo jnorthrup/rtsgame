@@ -60,7 +60,14 @@ const COMPUTRONIUM_CONFIG = {
     MIN_CORE_EFFICIENCY: 0.2,
     COMPUTATIONAL_WARFARE_COST: 5.0, // Computronium cost per PoW operation
     C2_LATENCY_BASE: 0.1, // Base command latency in seconds
-    C2_COMPUTRONIUM_BONUS: 0.02 // Latency reduction per computronium point
+    C2_COMPUTRONIUM_BONUS: 0.02, // Latency reduction per computronium point
+    
+    // Command & Control ranges
+    COMMAND_RANGES: {
+        TACTICAL: 150,   // Close-range tactical command
+        OPERATIONAL: 300, // Medium-range operational command
+        STRATEGIC: 500   // Long-range strategic command
+    }
 };
 
 const MIN_LAND_PERCENTAGE = 0.3;
@@ -131,9 +138,6 @@ export const BUILDING_YIELDS = {
 };
 
 export {
-    WORLD_SIZE,
-    TILE_SIZE,
-    GRID_SIZE,
     TERRAIN_TYPES,
     RESOURCE_TYPES,
     COMPUTRONIUM_CONFIG,

@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../config/gameConstants.js';
+import { TILE_SIZE } from '../../config/gameConstants.js';
 
 export class Renderer {
     constructor(canvas, camera) {

@@ -2,7 +2,7 @@
 // Records complete battle data for post-game analysis and improvement
 // Enhanced with deterministic action recording for synchronous replay
 
-import { gameRNG, enableDeterministicMode, createReproducibleSeed } from './deterministicRNG.js';
+import { gameRNG, enableDeterministicMode, createReproducibleSeed } from '../deterministicRNG.js';
 
 export class BattleJournal {
     constructor() {

@@ -45,11 +45,11 @@ import { Simulation } from './core/simulation.js';
 import { startRandomSeedRecording } from './core/recordingUtils.js';
 import { SIMULATION_CONFIG } from './config/simulationConfig.js';
 import battleJournal from './ai/battleJournal.js'; // Import battleJournal
-import { Effect } from './core/effect.js'; // Import Effect class
-import { Caption } from './core/caption.js'; // Import Caption class
+import { Effect } from './core/entities/effect.js'; // Import Effect class
+import { Caption } from './core/entities/caption.js'; // Import Caption class
 import { initThreeRenderer } from './rendering/threeRenderer.js'; // Import Three.js renderer
 // Minimap functionality removed
-import { updateUI } from './rendering/ui.js'; // NEW: Import updateUI
+import { ModernUIManager } from './ui/modernUIManager.js'; // NEW: Import Modern UI Manager
 
 // Initial game setup
 // Initialize gameContext properties for the first time
@@ -150,11 +150,29 @@ gameContext.selectionManager = new SelectionManager(gameContext); // Pass gameCo
 gameContext.windowManager = new WindowManager();
 gameContext.allowWindowDrawing = true;
 
+// Initialize Modern UI Manager
+let modernUIManager = null;
+
 // Initialize SupCom camera (will be done after renderer is ready)
 let supcomCamera = null;
 
+// Comprehensive HMR protection - prevent multiple initialization
+if (window.gameInitialized) {
+    console.log("Game already initialized, skipping duplicate initialization due to HMR");
+    // Early exit to prevent duplicate initialization
+    if (module.hot) {
+        module.hot.decline(); // Disable HMR for this module to prevent reloading
+    }
+} else {
+    window.gameInitialized = true;
 
-// Initialize input handling and start the game
+    // Stop any existing animation loops
+    if (window.gameAnimationId) {
+        cancelAnimationFrame(window.gameAnimationId);
+        window.gameAnimationId = null;
+    }
+
+// Initialize input handling and start the game - only run once
 (async () => {
 try {
 if (!gameContext.HEADLESS_MODE) {
@@ -219,8 +237,9 @@ if (!gameContext.HEADLESS_MODE) {
     const inputManager = new InputManager(simulation);
     gameContext.inputManager = inputManager; // Make it available to initInputHandling via gameContext
 
-    // React UI removed - using pure HTML/CSS UI
-    console.log("Pure HTML/CSS UI initialized.");
+    // Initialize Modern UI Manager
+    modernUIManager = new ModernUIManager(gameContext);
+    console.log("Modern RTS UI initialized.");
 
     // Start the game loop
     console.log("Starting game loop with new Simulation engine...");
@@ -230,11 +249,13 @@ if (!gameContext.HEADLESS_MODE) {
         lastFrameTime = timestamp;
         
         // Add battle detection and camera adjustment
-        if (simulation.entityManager) {
-            const battlingUnits = simulation.entityManager.units.filter(unit => unit.state === 'attacking' || unit.health < unit.maxHealth);
+        if (simulation.entityManager && simulation.entityManager.units && Array.isArray(simulation.entityManager.units)) {
+            const battlingUnits = simulation.entityManager.units.filter(unit =>
+                unit && (unit.state === 'attacking' || (unit.health !== undefined && unit.maxHealth !== undefined && unit.health < unit.maxHealth))
+            );
             if (battlingUnits.length > 0) {
-                const battleCenterX = battlingUnits.reduce((sum, unit) => sum + unit.x, 0) / battlingUnits.length;
-                const battleCenterY = battlingUnits.reduce((sum, unit) => sum + unit.y, 0) / battlingUnits.length;
+                const battleCenterX = battlingUnits.reduce((sum, unit) => sum + (unit.x || 0), 0) / battlingUnits.length;
+                const battleCenterY = battlingUnits.reduce((sum, unit) => sum + (unit.y || 0), 0) / battlingUnits.length;
                 gameContext.camera.targetX = battleCenterX;
                 gameContext.camera.targetY = battleCenterY;
                 gameContext.camera.targetZoom = Math.max(2.0, gameContext.camera.targetZoom);  // Zoom in slightly for focus
@@ -263,20 +284,23 @@ if (!gameContext.HEADLESS_MODE) {
                 console.error("Error during WebGL rendering in main loop:", e);
             }
 
-            // Minimap functionality removed
-
-            // Update other UI elements (DOM manipulation)
-            // updateUI needs simulation data, so we merge it with gameContext for the UI
-            const uiContext = {
-                ...gameContext,
-                units: simulation.entityManager?.units || [],
-                buildings: simulation.entityManager?.buildings || [],
-                resources: simulation.resources || { blue: {}, red: {} },
-                gameState: simulation.gameState || gameContext.gameState
-            };
-            updateUI(uiContext);
-
-            // Pure HTML UI updates handled by updateUI()
+            // Update Modern UI Manager
+            if (modernUIManager) {
+                // Add extra safety checks to prevent filter errors
+                const units = (simulation.entityManager && Array.isArray(simulation.entityManager.units)) ? simulation.entityManager.units : [];
+                const buildings = (simulation.entityManager && Array.isArray(simulation.entityManager.buildings)) ? simulation.entityManager.buildings : [];
+                
+                const uiContext = {
+                    ...gameContext,
+                    units: units,
+                    buildings: buildings,
+                    resources: simulation.resources || { blue: {}, red: {} },
+                    gameState: simulation.gameState || gameContext.gameState,
+                    terrain: simulation.terrain || null,
+                    resourceNodes: simulation.resourceNodes || []
+                };
+                modernUIManager.update(uiContext);
+            }
         }
         
         // Check if the simulation or other logic determined the game should end
@@ -292,9 +316,9 @@ if (!gameContext.HEADLESS_MODE) {
             return; // Stop requesting new frames
         }
 
-        requestAnimationFrame(animate);
+        window.gameAnimationId = requestAnimationFrame(animate);
     }
-    requestAnimationFrame(animate);
+    window.gameAnimationId = requestAnimationFrame(animate);
 }
 } catch (error) {
     console.error("Error during initialization:", error);
@@ -309,12 +333,17 @@ if (!gameContext.HEADLESS_MODE) {
 }
 })(); // Close the async IIFE
 
-import { GameState, TensorOps, DeterministicRNG } from '../src/trikeshed/core';
-import { GameEngine } from './core/gameEngine';
-import { ThreeRenderer } from './rendering/threeRenderer';
-import { UIManager } from './ui/uiManager';
-import { GameInitializer } from './core/gameInitializer.js';
+} // Close the HMR protection if block
 
+// import { GameState, TensorOps, DeterministicRNG } from '../src/trikeshed/core';
+// import { GameEngine } from './core/gameEngine';
+// Moved these imports to prevent issues - they're not currently used anyway
+// import { ThreeRenderer } from './rendering/threeRenderer';
+// import { UIManager } from './ui/uiManager';
+// import { GameInitializer } from './core/gameInitializer.js';
+
+// Commented out problematic Game class that uses non-existent imports
+/*
 class Game {
     constructor() {
         // Initialize core systems
@@ -365,3 +394,4 @@ const gameInitializer = new GameInitializer();
 gameInitializer.initialize().catch(error => {
     console.error("Failed to initialize game:", error);
 });
+*/

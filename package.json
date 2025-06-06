@@ -10,18 +10,21 @@
     "preprocess:models": "node scripts/preprocess-models.js"
   },
   "dependencies": {
-    "three": "^0.162.0",
+    "gl-matrix": "^3.4.3",
     "immer": "^10.0.3",
-    "gl-matrix": "^3.4.3"
+    "three": "^0.162.0"
   },
   "devDependencies": {
+    "@types/node": "^20.11.24",
+    "@types/three": "^0.162.0",
+    "compression-webpack-plugin": "^11.1.0",
+    "copy-webpack-plugin": "^13.0.0",
+    "html-webpack-plugin": "^5.6.3",
+    "ts-loader": "^9.5.1",
     "typescript": "^5.3.3",
     "webpack": "^5.90.3",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.0.2",
-    "ts-loader": "^9.5.1",
-    "@types/three": "^0.162.0",
-    "@types/node": "^20.11.24"
+    "webpack-dev-server": "^5.0.2"
   },
   "keywords": [
     "webgl",

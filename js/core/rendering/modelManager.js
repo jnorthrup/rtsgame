@@ -1,5 +1,5 @@
 import { Group, Object3D, InstancedMesh, Matrix4, Vector3 } from 'three';
-import { modelLoader } from '../utils/modelLoader.js';
+import { modelLoader } from '../../utils/modelLoader.js';
 
 class ModelManager {
     constructor() {

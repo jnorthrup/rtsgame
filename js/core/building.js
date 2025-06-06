@@ -3,7 +3,7 @@ import { UNIT_TYPES } from '../config/unitTypes.js';
 import { TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
 import { findLandPosition } from './terrain.js';
 import { Unit } from './unit.js'; // Added import
-import { Caption } from './caption.js'; // Added import
+import { Caption } from './entities/caption.js'; // Added import
 // Global variables like 'resources', 'units', 'captions', 'addEvent'
 // are accessed directly. This tight coupling will be addressed in later refactoring.
 

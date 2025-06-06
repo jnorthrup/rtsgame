@@ -5,7 +5,7 @@ import { ReplayManager, BattleJournal, ReplayPlayer } from './replay/index.js';
 import { Renderer, Camera, ModelManager, BatchProcessor } from './rendering/index.js';
 import { Effect, Projectile, Caption } from './entities/index.js';
 import { PerformanceMonitor, SpatialIndex } from './optimization/index.js';
-import { battleJournal } from './battleJournal.js';
+import { battleJournal } from '../ai/battleJournal.js';
 import { gameRNG, enableDeterministicMode } from './deterministicRNG.js';
 import { TerrainManager } from './terrainManager.js';
 import { UNIT_TYPES } from '../config/unitTypes.js';

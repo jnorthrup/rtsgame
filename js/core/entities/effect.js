@@ -1,5 +1,3 @@
-import { UNIT_TYPES } from '../config/unitTypes.js';
-import { BUILDING_TYPES } from '../config/buildingTypes.js';
 // Note: Other dependencies like TERRAIN_TYPES, TILE_SIZE, GRID_SIZE, WORLD_SIZE,
 // and access to global arrays like 'captions', 'effects', 'buildings', 'resources', 'resourceNodes'
 // will be addressed in subsequent refactoring steps. For now, the Unit class methods

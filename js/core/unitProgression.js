@@ -73,14 +73,19 @@ export class UnitProgression {
      * @returns {boolean} Whether unit is under fire
      */
     isUnderFire(gameContext) {
-        const nearbyEnemies = gameContext.units.filter(u => 
-            u.team !== this.unit.team && 
-            this.unit.getDistance(u) < 200
+        // Add null checks for gameContext and units array
+        if (!gameContext || !gameContext.units || !Array.isArray(gameContext.units)) {
+            return false;
+        }
+        
+        const nearbyEnemies = gameContext.units.filter(u =>
+            u && u.team !== this.unit.team &&
+            this.unit.getDistance && this.unit.getDistance(u) < 200
         );
         
-        return nearbyEnemies.some(enemy => 
-            enemy.target === this.unit || 
-            enemy.getDistance(this.unit) < enemy.attackRange
+        return nearbyEnemies.some(enemy =>
+            enemy.target === this.unit ||
+            (enemy.getDistance && enemy.attackRange && enemy.getDistance(this.unit) < enemy.attackRange)
         );
     }
 
