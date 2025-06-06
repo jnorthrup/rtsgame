@@ -2,12 +2,15 @@
 
 import { UNIT_TYPES } from '../config/unitTypes.js';
 import { BUILDING_TYPES } from '../config/buildingTypes.js';
-import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES } from '../config/gameConstants.js';
+import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES, RESOURCE_TYPES, COMPUTRONIUM_CONFIG } from '../config/gameConstants.js';
 import { SIMULATION_CONFIG } from '../config/simulationConfig.js';
 import { Unit } from './unit.js';
 import { Building } from './building.js';
 import { generateTerrain } from './terrainManager.js';
 import { findLandPosition } from './terrain.js';
+import { TrikeShedEntityManager } from './trikeshedEntityManager.js';
+import { ComputroniumManager } from './computroniumManager.js';
+import { EnhancedCommandHierarchy } from './enhancedCommandHierarchy.js';
 
 // EntityManager class to manage all game entities
 export class EntityManager {
@@ -138,23 +141,39 @@ export class Simulation {
         this.RECORD_AI_DECISIONS_DURATION_SECONDS = context.RECORD_AI_DECISIONS_DURATION_SECONDS;
         this.battleJournal = context.battleJournal;
         
-        // Initialize managers
-        this.entityManager = new EntityManager();
+        // Initialize managers - use TrikeShed-based entity management
+        this.entityManager = new TrikeShedEntityManager();
         this.gameState = new GameState();
         
-        // Initialize resources
+        // Initialize Computronium managers for each team
+        this.computroniumManagers = {
+            blue: new ComputroniumManager('blue'),
+            red: new ComputroniumManager('red')
+        };
+        
+        // Initialize Enhanced Command Hierarchies for each team
+        this.commandHierarchies = {
+            blue: new EnhancedCommandHierarchy('blue', this.computroniumManagers.blue),
+            red: new EnhancedCommandHierarchy('red', this.computroniumManagers.red)
+        };
+        
+        // Initialize resources - now including Computronium
         this.resources = {
             blue: {
                 mass: SIMULATION_CONFIG.INITIAL_BLUE_MASS,
                 energy: SIMULATION_CONFIG.INITIAL_BLUE_ENERGY,
+                computronium: 10, // Start with some Computronium for initial building
                 massIncome: 0,
-                energyIncome: 0
+                energyIncome: 0,
+                computroniumIncome: 0
             },
             red: {
                 mass: SIMULATION_CONFIG.INITIAL_RED_MASS,
                 energy: SIMULATION_CONFIG.INITIAL_RED_ENERGY,
+                computronium: 10, // Start with some Computronium for initial building
                 massIncome: 0,
-                energyIncome: 0
+                energyIncome: 0,
+                computroniumIncome: 0
             }
         };
 
@@ -188,7 +207,9 @@ export class Simulation {
             UNIT_TYPES.commander.buildList = [
                 BUILDING_TYPES.massExtractor,
                 BUILDING_TYPES.energyExtractor,
-                BUILDING_TYPES.landFactory
+                BUILDING_TYPES.landFactory,
+                BUILDING_TYPES.computroniumExtractor,
+                BUILDING_TYPES.advancedComputroniumCore
             ];
         }
         
@@ -234,7 +255,16 @@ export class Simulation {
                 if (this.terrain[x][y].type === TERRAIN_TYPES.RESOURCE) {
                     const worldX = x * TILE_SIZE;
                     const worldY = y * TILE_SIZE;
-                    const type = this.seedRandom.random() < 0.5 ? 'mass' : 'energy';
+                    // Generate different resource types including Computronium
+                    const rand = this.seedRandom.random();
+                    let type;
+                    if (rand < 0.4) {
+                        type = RESOURCE_TYPES.MASS;
+                    } else if (rand < 0.8) {
+                        type = RESOURCE_TYPES.ENERGY;
+                    } else {
+                        type = RESOURCE_TYPES.COMPUTRONIUM; // Rare but valuable
+                    }
                     
                     this.resourceNodes.push({
                         x: worldX,
@@ -268,6 +298,16 @@ export class Simulation {
         
         this.entityManager.addUnit(blueCommander);
         this.entityManager.addUnit(redCommander);
+        
+        // Add Computronium cores to commanders (they are advanced units)
+        this.computroniumManagers.blue.addCore(blueCommander, 1.0); // Full efficiency
+        this.computroniumManagers.red.addCore(redCommander, 1.0);
+        
+        // Register commanders in command hierarchies (rank 5 = highest)
+        this.commandHierarchies.blue.registerEntity(blueCommander, 5);
+        this.commandHierarchies.red.registerEntity(redCommander, 5);
+        
+        console.log('[TrikeShed] Added Computronium cores and C&C nodes to commanders');
         
         this.gameState.addEvent('spawn', 'Commanders deployed to battlefield', 2);
         
@@ -312,6 +352,12 @@ export class Simulation {
         // Update resource income display
         this.updateResourceIncome();
         
+        // Update Computronium systems
+        this.updateComputroniumSystems(deltaTime);
+        
+        // Update Command Hierarchies
+        this.updateCommandHierarchies(deltaTime);
+        
         // Update all entities
         this.entityManager.update(this, deltaTime);
         
@@ -332,6 +378,7 @@ export class Simulation {
         for (const team of ['blue', 'red']) {
             this.resources[team].massIncome = 0;
             this.resources[team].energyIncome = 0;
+            this.resources[team].computroniumIncome = 0;
             
             for (const building of this.entityManager.buildings) {
                 if (building.team === team && building.type.resourceGeneration) {
@@ -343,6 +390,95 @@ export class Simulation {
                     }
                 }
             }
+            
+            // Computronium income from cores
+            const computroniumManager = this.computroniumManagers[team];
+            const stats = computroniumManager.getGenerationStats();
+            if (stats) {
+                this.resources[team].computroniumIncome = stats.currentRate * 60; // per minute
+            }
+        }
+    }
+
+    updateComputroniumSystems(deltaTime) {
+        // Update each team's computronium management
+        for (const team of ['blue', 'red']) {
+            const manager = this.computroniumManagers[team];
+            const generated = manager.update(deltaTime);
+            
+            // Add generated computronium to team resources
+            this.resources[team].computronium += generated;
+            
+            // Log significant computronium generation
+            if (generated > 0.1) {
+                console.log(`[${team.toUpperCase()}] Generated ${generated.toFixed(3)} computronium. Total: ${this.resources[team].computronium.toFixed(2)}`);
+            }
+        }
+        
+        // Handle potential computational warfare between teams
+        this.handleComputationalWarfare();
+    }
+
+    handleComputationalWarfare() {
+        // Simple AI-driven computational warfare
+        for (const attackerTeam of ['blue', 'red']) {
+            const defenderTeam = attackerTeam === 'blue' ? 'red' : 'blue';
+            const attacker = this.computroniumManagers[attackerTeam];
+            const defender = this.computroniumManagers[defenderTeam];
+            
+            // Randomly launch PoW attacks if attacker has enough capability
+            if (attacker.powAttackCapability > 0 && this.seedRandom.random() < 0.001) { // 0.1% chance per frame
+                const intensity = Math.min(3, attacker.powAttackCapability);
+                if (attacker.launchPowAttack(defender, intensity)) {
+                    this.gameState.addEvent(
+                        'computational_warfare',
+                        `${attackerTeam.toUpperCase()} launches computational attack on ${defenderTeam.toUpperCase()}!`,
+                        2
+                    );
+                }
+            }
+        }
+    }
+
+    updateCommandHierarchies(deltaTime) {
+        // Update each team's command hierarchy
+        for (const team of ['blue', 'red']) {
+            const hierarchy = this.commandHierarchies[team];
+            hierarchy.update(deltaTime);
+            
+            // Periodically issue strategic commands
+            if (this.gameState.gameTime % 5 < deltaTime) { // Every 5 seconds
+                this.issueStrategicCommands(team);
+            }
+        }
+    }
+
+    issueStrategicCommands(team) {
+        const hierarchy = this.commandHierarchies[team];
+        const enemyTeam = team === 'blue' ? 'red' : 'blue';
+        
+        // Find enemy units to target
+        const enemyUnits = this.entityManager.units.filter(u => u.team === enemyTeam && u.hp > 0);
+        
+        if (enemyUnits.length > 0) {
+            // Issue attack command to nearest enemy
+            const randomEnemy = enemyUnits[Math.floor(this.seedRandom.random() * enemyUnits.length)];
+            
+            const success = hierarchy.issueStrategicCommand('attack', {
+                target: randomEnemy
+            });
+            
+            if (success) {
+                console.log(`[C&C] ${team.toUpperCase()} hierarchy issued attack command on ${randomEnemy.type}`);
+            }
+        } else {
+            // No enemies, issue patrol command
+            hierarchy.issueStrategicCommand('move', {
+                target: {
+                    x: this.seedRandom.random() * WORLD_SIZE,
+                    y: this.seedRandom.random() * WORLD_SIZE
+                }
+            });
         }
     }
 

@@ -21,6 +21,24 @@ class Building {
         this.shields = 0;
         this.maxShields = 0;
         this.captionCooldown = 0;
+        
+        // Add Computronium core if this building type has one
+        if (type.hasComputroniumCore && simulation && simulation.computroniumManagers) {
+            const manager = simulation.computroniumManagers[team];
+            if (manager) {
+                this.computroniumCore = manager.addCore(this, type.coreEfficiency || 1.0);
+                console.log(`[Building] Added Computronium core to ${type.name}`);
+            }
+        }
+        
+        // Register in command hierarchy if simulation supports it
+        if (simulation && simulation.commandHierarchies && type.commandRank) {
+            const hierarchy = simulation.commandHierarchies[team];
+            if (hierarchy) {
+                this.commandNode = hierarchy.registerEntity(this, type.commandRank);
+                console.log(`[Building] Registered ${type.name} in command hierarchy (rank ${type.commandRank})`);
+            }
+        }
     }
 
     setRallyPoint(buildingX, buildingY, simulation) { // Renamed parameter for clarity
@@ -70,7 +88,8 @@ class Building {
         if (this.type.produces && this.productionQueue.length === 0) {
             const unitTypesToBuild = this.type.produces.filter(unitType => {
                 return resources[this.team].mass >= (unitType.cost?.mass || 0) &&
-                       resources[this.team].energy >= (unitType.cost?.energy || 0);
+                       resources[this.team].energy >= (unitType.cost?.energy || 0) &&
+                       resources[this.team].computronium >= (unitType.cost?.computronium || 0);
             });
 
             if (unitTypesToBuild.length > 0 && seedRandom && seedRandom.random() < 0.02) { 
@@ -80,6 +99,7 @@ class Building {
                 if (unitType.cost) {
                     resources[this.team].mass -= unitType.cost.mass || 0;
                     resources[this.team].energy -= unitType.cost.energy || 0;
+                    resources[this.team].computronium -= unitType.cost.computronium || 0;
                 }
             }
         }

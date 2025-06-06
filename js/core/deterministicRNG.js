@@ -2,7 +2,7 @@
 // Uses Linear Congruential Generator (LCG) algorithm for predictable random sequences
 
 export class DeterministicRNG {
-    constructor(seed = 12345) {
+    constructor(seed = Date.now()) {
         this.seed = seed;
         this.state = seed;
         this.originalSeed = seed;
@@ -150,6 +150,114 @@ export class DeterministicRNG {
             callCount: this.callCount,
             historyLength: this.history.length,
             recentCalls: this.history.slice(-5)
+        };
+    }
+
+    // Generate a random point within a circle
+    randomPointInCircle(centerX, centerY, radius) {
+        const angle = this.random() * Math.PI * 2;
+        const r = radius * Math.sqrt(this.random());
+        return {
+            x: centerX + r * Math.cos(angle),
+            y: centerY + r * Math.sin(angle)
+        };
+    }
+    
+    // Generate a random point within a rectangle
+    randomPointInRect(x, y, width, height) {
+        return {
+            x: x + this.random() * width,
+            y: y + this.random() * height
+        };
+    }
+    
+    // Generate a random point on the perimeter of a circle
+    randomPointOnCircle(centerX, centerY, radius) {
+        const angle = this.random() * Math.PI * 2;
+        return {
+            x: centerX + radius * Math.cos(angle),
+            y: centerY + radius * Math.sin(angle)
+        };
+    }
+    
+    // Generate a random point on a line segment
+    randomPointOnLine(x1, y1, x2, y2) {
+        const t = this.random();
+        return {
+            x: x1 + t * (x2 - x1),
+            y: y1 + t * (y2 - y1)
+        };
+    }
+    
+    // Generate a random point in a polygon (using rejection sampling)
+    randomPointInPolygon(vertices) {
+        // Find bounding box
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+        
+        for (const vertex of vertices) {
+            minX = Math.min(minX, vertex.x);
+            minY = Math.min(minY, vertex.y);
+            maxX = Math.max(maxX, vertex.x);
+            maxY = Math.max(maxY, vertex.y);
+        }
+        
+        // Try points until we find one inside the polygon
+        while (true) {
+            const point = {
+                x: this.randomFloat(minX, maxX),
+                y: this.randomFloat(minY, maxY)
+            };
+            
+            if (this.isPointInPolygon(point, vertices)) {
+                return point;
+            }
+        }
+    }
+    
+    // Check if a point is inside a polygon using ray casting algorithm
+    isPointInPolygon(point, vertices) {
+        let inside = false;
+        for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+            const xi = vertices[i].x, yi = vertices[i].y;
+            const xj = vertices[j].x, yj = vertices[j].y;
+            
+            const intersect = ((yi > point.y) !== (yj > point.y))
+                && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+    
+    // Generate a random point in a triangle
+    randomPointInTriangle(x1, y1, x2, y2, x3, y3) {
+        const r1 = this.random();
+        const r2 = this.random();
+        
+        const sqrtR1 = Math.sqrt(r1);
+        return {
+            x: (1 - sqrtR1) * x1 + sqrtR1 * (1 - r2) * x2 + sqrtR1 * r2 * x3,
+            y: (1 - sqrtR1) * y1 + sqrtR1 * (1 - r2) * y2 + sqrtR1 * r2 * y3
+        };
+    }
+    
+    // Generate a random point in a sector of a circle
+    randomPointInSector(centerX, centerY, radius, startAngle, endAngle) {
+        const angle = this.randomFloat(startAngle, endAngle);
+        const r = radius * Math.sqrt(this.random());
+        return {
+            x: centerX + r * Math.cos(angle),
+            y: centerY + r * Math.sin(angle)
+        };
+    }
+    
+    // Generate a random point in an annulus (ring)
+    randomPointInAnnulus(centerX, centerY, innerRadius, outerRadius) {
+        const angle = this.random() * Math.PI * 2;
+        const r = Math.sqrt(this.random() * (outerRadius * outerRadius - innerRadius * innerRadius) + innerRadius * innerRadius);
+        return {
+            x: centerX + r * Math.cos(angle),
+            y: centerY + r * Math.sin(angle)
         };
     }
 }

@@ -1,77 +1,133 @@
 import { WORLD_SIZE, TILE_SIZE, GRID_SIZE, TERRAIN_TYPES, MIN_LAND_PERCENTAGE, MAX_TERRAIN_RETRIES } from '../config/gameConstants.js';
 
-// Perlin noise implementation
-class PerlinNoise {
-    constructor(seed = null) {
-        this.seed = seed || Math.random();
-        this.permutation = this.generatePermutation();
-        this.p = [...this.permutation, ...this.permutation]; // Duplicate for wrapping
+/**
+ * Perlin noise terrain generator
+ * Generates terrain using Perlin noise for natural-looking landscapes
+ */
+
+export class PerlinNoiseGenerator {
+    constructor() {
+        this.permutation = new Array(512);
+        this.gradients = new Array(512);
     }
 
-    generatePermutation() {
-        const perm = Array.from({length: 256}, (_, i) => i);
-        // Fisher-Yates shuffle with seed
-        let random = this.seed;
-        for (let i = perm.length - 1; i > 0; i--) {
-            random = (random * 9301 + 49297) % 233280; // Linear congruential generator
-            const j = Math.floor((random / 233280) * (i + 1));
-            [perm[i], perm[j]] = [perm[j], perm[i]];
+    initialize(seed) {
+        // Initialize permutation table
+        const p = new Array(256);
+        for (let i = 0; i < 256; i++) {
+            p[i] = i;
         }
-        return perm;
+
+        // Shuffle using seed
+        for (let i = 255; i > 0; i--) {
+            const j = Math.floor(seed.random() * (i + 1));
+            [p[i], p[j]] = [p[j], p[i]];
+        }
+
+        // Extend permutation table
+        for (let i = 0; i < 512; i++) {
+            this.permutation[i] = p[i & 255];
+            this.gradients[i] = this.getGradient(i);
+        }
+    }
+
+    getGradient(index) {
+        const v = (index * 16807) % 2147483647;
+        const angle = (v / 2147483647) * Math.PI * 2;
+        return {
+            x: Math.cos(angle),
+            y: Math.sin(angle)
+        };
     }
 
     fade(t) {
         return t * t * t * (t * (t * 6 - 15) + 10);
     }
 
-    lerp(t, a, b) {
+    lerp(a, b, t) {
         return a + t * (b - a);
     }
 
-    grad(hash, x, y) {
-        const h = hash & 15;
-        const u = h < 8 ? x : y;
-        const v = h < 4 ? y : h === 12 || h === 14 ? x : 0;
-        return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+    dot(g, x, y) {
+        return g.x * x + g.y * y;
     }
 
     noise(x, y) {
         const X = Math.floor(x) & 255;
         const Y = Math.floor(y) & 255;
-        
+
         x -= Math.floor(x);
         y -= Math.floor(y);
-        
+
         const u = this.fade(x);
         const v = this.fade(y);
-        
-        const A = this.p[X] + Y;
-        const AA = this.p[A];
-        const AB = this.p[A + 1];
-        const B = this.p[X + 1] + Y;
-        const BA = this.p[B];
-        const BB = this.p[B + 1];
-        
-        return this.lerp(v,
-            this.lerp(u, this.grad(this.p[AA], x, y), this.grad(this.p[BA], x - 1, y)),
-            this.lerp(u, this.grad(this.p[AB], x, y - 1), this.grad(this.p[BB], x - 1, y - 1))
+
+        const A = this.permutation[X] + Y;
+        const B = this.permutation[X + 1] + Y;
+
+        return this.lerp(
+            this.lerp(
+                this.dot(this.gradients[this.permutation[A]], x, y),
+                this.dot(this.gradients[this.permutation[B]], x - 1, y),
+                u
+            ),
+            this.lerp(
+                this.dot(this.gradients[this.permutation[A + 1]], x, y - 1),
+                this.dot(this.gradients[this.permutation[B + 1]], x - 1, y - 1),
+                u
+            ),
+            v
         );
     }
 
-    octaveNoise(x, y, octaves = 4, persistence = 0.5, scale = 0.01) {
-        let value = 0;
-        let amplitude = 1;
-        let frequency = scale;
-        let maxValue = 0;
+    generateTerrain(gameContext) {
+        const { width, height, seedRandom } = gameContext;
+        this.initialize(seedRandom);
 
-        for (let i = 0; i < octaves; i++) {
-            value += this.noise(x * frequency, y * frequency) * amplitude;
-            maxValue += amplitude;
-            amplitude *= persistence;
-            frequency *= 2;
+        const terrain = new Array(height);
+        const scale = 0.1;
+        const octaves = 4;
+        const persistence = 0.5;
+        const lacunarity = 2.0;
+
+        for (let y = 0; y < height; y++) {
+            terrain[y] = new Array(width);
+            for (let x = 0; x < width; x++) {
+                let amplitude = 1;
+                let frequency = 1;
+                let noiseHeight = 0;
+                let amplitudeSum = 0;
+
+                for (let i = 0; i < octaves; i++) {
+                    const sampleX = x * scale * frequency;
+                    const sampleY = y * scale * frequency;
+
+                    const perlinValue = this.noise(sampleX, sampleY);
+                    noiseHeight += perlinValue * amplitude;
+                    amplitudeSum += amplitude;
+
+                    amplitude *= persistence;
+                    frequency *= lacunarity;
+                }
+
+                // Normalize and map to terrain types
+                noiseHeight = noiseHeight / amplitudeSum;
+                terrain[y][x] = this.mapToTerrainType(noiseHeight);
+            }
         }
 
-        return value / maxValue;
+        return terrain;
+    }
+
+    mapToTerrainType(value) {
+        // Map noise value to terrain types
+        if (value < 0.2) return 'DEEP_WATER';
+        if (value < 0.3) return 'WATER';
+        if (value < 0.4) return 'SHALLOW_WATER';
+        if (value < 0.5) return 'SAND';
+        if (value < 0.7) return 'GRASS';
+        if (value < 0.85) return 'FOREST';
+        return 'MOUNTAIN';
     }
 }
 
@@ -84,7 +140,7 @@ export function generatePerlinNoiseTerrain(gameContext, retries = 0) {
     console.log("Generating Perlin noise terrain with elevation model...");
     
     const SEA_LEVEL = 0.0;
-    const perlin = new PerlinNoise(gameContext.GAME_SEED);
+    const perlin = new PerlinNoiseGenerator();
     
     // Initialize terrain and mobility mesh
     gameContext.terrain = [];
@@ -96,8 +152,20 @@ export function generatePerlinNoiseTerrain(gameContext, retries = 0) {
         
         for (let y = 0; y < GRID_SIZE; y++) {
             // Generate elevation using multiple octaves of Perlin noise
-            const baseElevation = perlin.octaveNoise(x, y, 4, 0.5, 0.02);
-            const detailNoise = perlin.octaveNoise(x, y, 2, 0.3, 0.08) * 0.3;
+            const baseElevation = perlin.generateTerrain({
+                width: 1,
+                height: 1,
+                scale: 0.02,
+                octaves: 4,
+                persistence: 0.5
+            })[0][0];
+            const detailNoise = perlin.generateTerrain({
+                width: 1,
+                height: 1,
+                scale: 0.08,
+                octaves: 2,
+                persistence: 0.3
+            })[0][0] * 0.3;
             const elevation = baseElevation + detailNoise;
             
             // Determine terrain type based on elevation relative to sea level

@@ -6,6 +6,8 @@ import { GrenadeProjectile } from './projectile.js';
 import { Effect } from './effect.js';
 import { Caption } from './caption.js';
 import { Building } from './building.js';
+import { UnitProgression } from './unitProgression.js';
+import { AutonomousBehavior } from './autonomousBehavior.js';
 
 const WEIGHT_SPEED_PENALTY_FACTOR = 0.01;
 const DEFAULT_UNIT_SPEED = 1.0;
@@ -48,6 +50,25 @@ class Unit {
         this.lastThreatAssessment = 0;
         this.fleeThreshold = this.maxHp * 0.2;
         this.formation = null;
+        
+        // Add Computronium core if this unit type has one
+        if (type.hasComputroniumCore && simulation && simulation.computroniumManagers) {
+            const manager = simulation.computroniumManagers[team];
+            if (manager) {
+                this.computroniumCore = manager.addCore(this, type.coreEfficiency || 1.0);
+                console.log(`[Unit] Added Computronium core to ${type.name}`);
+            }
+        }
+        
+        // Register in command hierarchy
+        if (simulation && simulation.commandHierarchies) {
+            const hierarchy = simulation.commandHierarchies[team];
+            if (hierarchy) {
+                const commandRank = type.commandRank || Math.max(1, type.tier || 1);
+                this.commandNode = hierarchy.registerEntity(this, commandRank);
+                console.log(`[Unit] Registered ${type.name} in command hierarchy (rank ${commandRank})`);
+            }
+        }
         this.captionCooldown = 0;
         this.constructionTask = null; // Specific for ACU/Engineer type units
         if (this.type.grenadeAbility) {
@@ -101,6 +122,62 @@ class Unit {
         this.commandFailures = 0;
         this.currentCommander = null; // Track who this unit is following
         this.lastCommandChange = 0; // Timestamp of last command transfer
+
+        // Computronium integration
+        this.computroniumCoreLevel = type.computroniumCoreLevel || 0;
+        this.coreFocusMode = type.defaultCoreFocusMode || 'BALANCED';
+        this.computroniumAuthorityModifier = 0;
+        this.computroniumCore = null;
+        this.lastFocusModeChange = 0;
+        this.focusModeCooldown = 10000; // 10 seconds cooldown between mode changes
+
+        // Core Focus Mode effects
+        this.focusModeEffects = {
+            OFFENSIVE: {
+                weaponEfficiency: 1.2,
+                c2Efficiency: 0.8,
+                powEfficiency: 0.7,
+                sensorEfficiency: 0.9
+            },
+            DEFENSIVE: {
+                weaponEfficiency: 0.9,
+                c2Efficiency: 0.9,
+                powEfficiency: 0.8,
+                sensorEfficiency: 1.1
+            },
+            C_C: {
+                weaponEfficiency: 0.7,
+                c2Efficiency: 1.3,
+                powEfficiency: 1.2,
+                sensorEfficiency: 1.2
+            },
+            UTILITY: {
+                weaponEfficiency: 0.8,
+                c2Efficiency: 1.1,
+                powEfficiency: 0.9,
+                sensorEfficiency: 1.0
+            },
+            BALANCED: {
+                weaponEfficiency: 1.0,
+                c2Efficiency: 1.0,
+                powEfficiency: 1.0,
+                sensorEfficiency: 1.0
+            }
+        };
+
+        // Initialize progression system
+        this.progression = new UnitProgression(this);
+        
+        // Add progression-related properties
+        this.baseAuthority = this.calculateBaseAuthority();
+        this.effectiveAuthority = this.baseAuthority;
+        
+        // Add promotion callback
+        this.onPromotion = null;
+
+        // Add autonomous behavior
+        this.autonomousBehavior = null;
+        this.hasExplicitOrders = false;
     }
 
     getCurrentSpeed(simulation) { // Renamed gameContext to simulation
@@ -225,6 +302,14 @@ class Unit {
             this.grenadeCooldown -= deltaTime;
         }
         if (this.captionCooldown > 0) this.captionCooldown -= deltaTime;
+
+        // Update progression
+        this.progression.update(simulation, deltaTime);
+
+        // Update autonomous behavior if no explicit orders
+        if (this.autonomousBehavior && !this.hasExplicitOrders) {
+            this.autonomousBehavior.update(deltaTime);
+        }
     }
 
     defaultMovementAndTargeting(simulation, deltaTime) { // Renamed gameContext, added deltaTime
@@ -564,6 +649,16 @@ class Unit {
         } else if (simulation.seedRandom.random() < 0.01 && target.type && target.type.tier >= 2) {
             gameState.addEvent('battle', `Major engagement: ${this.type.name} vs ${target.type.name}`, 2, { x: this.x, y: this.y });
         }
+
+        // Record damage and experience
+        if (damage > 0) {
+            this.progression.recordDamage(damage);
+        }
+        
+        // Record kill
+        if (target.hp <= 0) {
+            this.progression.recordKill(target);
+        }
     }
 
     takeDamage(damage, sourceUnit, simulation) {
@@ -832,6 +927,180 @@ class Unit {
         }
         
         return priority;
+    }
+
+    /**
+     * Change the Computronium Core Focus Mode
+     * @param {string} newMode - New focus mode (OFFENSIVE, DEFENSIVE, C_C, UTILITY, BALANCED)
+     * @returns {boolean} True if mode was changed successfully
+     */
+    changeCoreFocusMode(newMode) {
+        const now = performance.now();
+        if (now - this.lastFocusModeChange < this.focusModeCooldown) {
+            return false;
+        }
+
+        if (!this.focusModeEffects[newMode]) {
+            return false;
+        }
+
+        this.coreFocusMode = newMode;
+        this.lastFocusModeChange = now;
+        this.updateComputroniumModifiers();
+        return true;
+    }
+
+    /**
+     * Update Computronium-based modifiers based on core level and focus mode
+     */
+    updateComputroniumModifiers() {
+        if (this.computroniumCoreLevel === 0) {
+            this.computroniumAuthorityModifier = 0;
+            return;
+        }
+
+        const effects = this.focusModeEffects[this.coreFocusMode];
+        const baseModifier = this.computroniumCoreLevel * 2; // Base modifier from core level
+
+        // Calculate authority modifier based on focus mode
+        if (this.coreFocusMode === 'C_C') {
+            this.computroniumAuthorityModifier = baseModifier * effects.c2Efficiency;
+        } else {
+            this.computroniumAuthorityModifier = baseModifier * 0.5; // Reduced authority for non-C&C modes
+        }
+
+        // Apply focus mode effects to other systems
+        this.weaponEfficiency = effects.weaponEfficiency;
+        this.c2Efficiency = effects.c2Efficiency;
+        this.powEfficiency = effects.powEfficiency;
+        this.sensorEfficiency = effects.sensorEfficiency;
+    }
+
+    /**
+     * Calculate base authority
+     * @returns {number} Base authority value
+     */
+    calculateBaseAuthority() {
+        // Base authority based on unit type
+        switch (this.type) {
+            case 'commander':
+                return 30;
+            case 'elite':
+                return 20;
+            case 'veteran':
+                return 15;
+            case 'regular':
+                return 10;
+            default:
+                return 5;
+        }
+    }
+
+    /**
+     * Get veterancy level
+     * @returns {string} Veterancy level
+     */
+    getVeterancyLevel() {
+        return this.progression.veterancyLevel;
+    }
+
+    /**
+     * Get command fitness
+     * @returns {string} Command fitness level
+     */
+    getCommandFitness() {
+        return this.progression.commandFitness;
+    }
+
+    /**
+     * Get effective authority
+     * @returns {number} Effective authority value
+     */
+    getEffectiveAuthority() {
+        return this.effectiveAuthority;
+    }
+
+    /**
+     * Record successful command
+     */
+    recordCommandSuccess() {
+        this.progression.recordCommandSuccess();
+    }
+
+    /**
+     * Record failed command
+     */
+    recordCommandFailure() {
+        this.progression.recordCommandFailure();
+    }
+
+    /**
+     * Set promotion callback
+     * @param {Function} callback - Callback function
+     */
+    setPromotionCallback(callback) {
+        this.onPromotion = callback;
+    }
+
+    /**
+     * Initialize autonomous behavior
+     * @param {Object} gameContext - Game context object
+     */
+    initializeAutonomousBehavior(gameContext) {
+        this.autonomousBehavior = new AutonomousBehavior(this, gameContext);
+    }
+
+    /**
+     * Check if unit has explicit orders
+     * @returns {boolean} True if unit has explicit orders
+     */
+    hasExplicitOrders() {
+        return this.hasExplicitOrders;
+    }
+
+    /**
+     * Set explicit orders flag
+     * @param {boolean} value - New value for explicit orders flag
+     */
+    setExplicitOrders(value) {
+        this.hasExplicitOrders = value;
+    }
+
+    /**
+     * Move unit to position
+     * @param {number} x - Target x coordinate
+     * @param {number} y - Target y coordinate
+     */
+    moveTo(x, y) {
+        this.hasExplicitOrders = true;
+        // ... existing moveTo code ...
+    }
+
+    /**
+     * Attack target
+     * @param {Object} target - Target to attack
+     */
+    attack(target) {
+        this.hasExplicitOrders = true;
+        // ... existing attack code ...
+    }
+
+    /**
+     * Build extractor at position
+     * @param {Object} position - Position to build extractor
+     */
+    buildExtractor(position) {
+        this.hasExplicitOrders = true;
+        // ... existing buildExtractor code ...
+    }
+
+    /**
+     * Repair target
+     * @param {Object} target - Target to repair
+     */
+    repair(target) {
+        this.hasExplicitOrders = true;
+        // ... existing repair code ...
     }
 }
 

@@ -155,11 +155,11 @@ function updateStatusWindow(gameContext) {
         <h4 style="color: #44f; margin: 10px 0 5px 0;">BLUE TEAM STATUS</h4>
         <div class="status-line">
             <span class="status-label">Resources:</span>
-            <span class="status-value">${Math.floor(resources.blue.mass)}M / ${Math.floor(resources.blue.energy)}E</span>
+            <span class="status-value">${Math.floor(resources.blue.mass)}M / ${Math.floor(resources.blue.energy)}E / ${(resources.blue.computronium || 0).toFixed(1)}C</span>
         </div>
         <div class="status-line">
             <span class="status-label">Income:</span>
-            <span class="status-value">+${resources.blue.massIncome || 0}/min M, +${resources.blue.energyIncome || 0}/min E</span>
+            <span class="status-value">+${resources.blue.massIncome || 0}/min M, +${resources.blue.energyIncome || 0}/min E, +${(resources.blue.computroniumIncome || 0).toFixed(1)}/min C</span>
         </div>
         <div class="status-line">
             <span class="status-label">Units:</span>
@@ -177,11 +177,11 @@ function updateStatusWindow(gameContext) {
         <h4 style="color: #f44; margin: 10px 0 5px 0;">RED TEAM STATUS</h4>
         <div class="status-line">
             <span class="status-label">Resources:</span>
-            <span class="status-value">${Math.floor(resources.red.mass)}M / ${Math.floor(resources.red.energy)}E</span>
+            <span class="status-value">${Math.floor(resources.red.mass)}M / ${Math.floor(resources.red.energy)}E / ${(resources.red.computronium || 0).toFixed(1)}C</span>
         </div>
         <div class="status-line">
             <span class="status-label">Income:</span>
-            <span class="status-value">+${resources.red.massIncome || 0}/min M, +${resources.red.energyIncome || 0}/min E</span>
+            <span class="status-value">+${resources.red.massIncome || 0}/min M, +${resources.red.energyIncome || 0}/min E, +${(resources.red.computroniumIncome || 0).toFixed(1)}/min C</span>
         </div>
         <div class="status-line">
             <span class="status-label">Units:</span>
@@ -209,6 +209,20 @@ function updateStatusWindow(gameContext) {
             <span class="status-label">Economic Strength:</span>
             <span class="status-value">Blue: ${blueStats.economicStrength} | Red: ${redStats.economicStrength}</span>
         </div>
+        
+        <h4 style="color: #f0f; margin: 10px 0 5px 0;">COMMAND & CONTROL</h4>
+        <div class="status-line">
+            <span class="status-label">Blue Authority:</span>
+            <span class="status-value">${blueStats.commandAuthority || 0} (${blueStats.autonomousUnits || 0} autonomous)</span>
+        </div>
+        <div class="status-line">
+            <span class="status-label">Red Authority:</span>
+            <span class="status-value">${redStats.commandAuthority || 0} (${redStats.autonomousUnits || 0} autonomous)</span>
+        </div>
+        <div class="status-line">
+            <span class="status-label">Computronium Cores:</span>
+            <span class="status-value">Blue: ${blueStats.computroniumCores || 0} | Red: ${redStats.computroniumCores || 0}</span>
+        </div>
     `;
     
     statusContent.innerHTML = html;
@@ -219,6 +233,18 @@ function getTeamStats(team, units, buildings, resources) {
     const teamBuildings = buildings.filter(b => b.team === team);
     
     const commander = teamUnits.find(u => u.type === UNIT_TYPES.commander);
+    
+    // Calculate command hierarchy stats
+    const autonomousUnits = teamUnits.filter(u => u.isAutonomous).length;
+    const computroniumCores = [...teamUnits, ...teamBuildings].filter(e => e.computroniumCore).length;
+    
+    // Simulate command authority (would get from actual hierarchy in full integration)
+    let commandAuthority = 0;
+    if (commander) {
+        commandAuthority = commander.hp; // Simplified - would be from command hierarchy
+        commandAuthority += teamUnits.length * 10; // Base authority from units
+        commandAuthority += computroniumCores * 50; // Computronium bonus
+    }
     
     return {
         units: {
@@ -236,7 +262,10 @@ function getTeamStats(team, units, buildings, resources) {
             activity: getCommanderActivity(commander)
         },
         armyStrength: calculateArmyStrength(teamUnits),
-        economicStrength: calculateEconomicStrength(teamBuildings, resources[team])
+        economicStrength: calculateEconomicStrength(teamBuildings, resources[team]),
+        commandAuthority: Math.floor(commandAuthority),
+        autonomousUnits: autonomousUnits,
+        computroniumCores: computroniumCores
     };
 }
 

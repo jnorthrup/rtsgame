@@ -167,15 +167,19 @@ export function seriesCharToString(series: Series<string>): string {
  * Type alias for a Tensor, which is a Join of its shape (number[]) and an accessor function
  * that takes coordinates (number[]) and returns an element.
  */
-export type Tensor<T> = Join<number[], (coords: number[]) => T>;
+export type Tensor<T> = {
+    data: T[];
+    shape: number[];
+    stride: number[];
+};
 
 /** Returns the shape of the Tensor. */
 export function tensorShape<T>(tensor: Tensor<T>): number[] {
-    return tensor.a;
+    return tensor.shape;
 }
 /** Returns the accessor function of the Tensor. */
 export function tensorAccessor<T>(tensor: Tensor<T>): (coords: number[]) => T {
-    return tensor.b;
+    return (coords: number[]) => TensorOps.get(tensor, coords);
 }
 
 // Syntactic sugar often directly uses the more verbose names in TS if they are clear enough,
@@ -203,7 +207,17 @@ export const totalSize = tensorTotalSize;
  * Constructs a Tensor from a given shape and accessor function.
  */
 export function TensorConstruct<T>(shape: number[], accessor: (coords: number[]) => T): Tensor<T> {
-    return j(shape, accessor);
+    const size = shape.reduce((a, b) => a * b, 1);
+    const stride = shape.slice(1).reduceRight(
+        (acc, dim) => [dim * acc[0], ...acc],
+        [1]
+    );
+    
+    return {
+        data: new Array(size).fill(null),
+        shape,
+        stride
+    };
 }
 
 /**
@@ -228,7 +242,7 @@ export function getTensorValue<T>(tensor: Tensor<T>, coords: number[]): T {
     if (coords.length !== rank(tensor)) {
         throw new Error(`Coordinate rank mismatch: Tensor rank is ${rank(tensor)}, got ${coords.length} coordinates.`);
     }
-    return tensorAccessor(tensor)(coords);
+    return TensorOps.get(tensor, coords);
 }
 
 /**
@@ -249,7 +263,7 @@ export function getTensorValueRank1<T>(tensor: Tensor<T>, i: number): T {
     if (rank(tensor) !== 1) {
         throw new Error(`Tensor is not rank 1. Current rank: ${rank(tensor)}`);
     }
-    return tensorAccessor(tensor)([i]);
+    return TensorOps.get(tensor, [i]);
 }
 
 /**
@@ -259,7 +273,7 @@ export function getTensorValueRank2<T>(tensor: Tensor<T>, i: number, j: number):
     if (rank(tensor) !== 2) {
         throw new Error(`Tensor is not rank 2. Current rank: ${rank(tensor)}`);
     }
-    return tensorAccessor(tensor)([i, j]);
+    return TensorOps.get(tensor, [i, j]);
 }
 
 // End of Part 1 of translation
@@ -273,7 +287,7 @@ export function getTensorValueRank2<T>(tensor: Tensor<T>, i: number, j: number):
  * with the same shape. This is an "alpha-conversion" operation.
  * Kotlin: infix fun <X, C> Tensor<X>.α(crossinline transform: (X) -> C): Tensor<C>
  */
-export function alphaConvert<X, C>(tensor: Tensor<X>, transform: (value: X) -> C): Tensor<C> {
+export function alphaConvert<X, C>(tensor: Tensor<X>, transform: (value: X) => C): Tensor<C> {
     return TensorConstruct(tensorShape(tensor), (coords: number[]) => transform(getTensorValue(tensor, coords)));
 }
 
@@ -281,7 +295,7 @@ export function alphaConvert<X, C>(tensor: Tensor<X>, transform: (value: X) -> C
  * Applies a transformation function element-wise to a Series, producing a new Series.
  * Kotlin: inline infix fun <X, C> Series<X>.α(crossinline transform: (X) -> C): Series<C>
  */
-export function alphaConvertSeries<X, C>(series: Series<X>, transform: (value: X) -> C): Series<C> {
+export function alphaConvertSeries<X, C>(series: Series<X>, transform: (value: X) => C): Series<C> {
     return j(size(series), (i: number) => transform(getSeriesValue(series, i)));
 }
 

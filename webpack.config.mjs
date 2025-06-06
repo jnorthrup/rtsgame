@@ -12,9 +12,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 export default {
   mode: isProduction ? 'production' : 'development',
-  entry: {
-    app: './js/app.js' // Consolidated entry point
-  },
+  entry: './js/app.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: isProduction ? '[name].[contenthash].bundle.js' : '[name].bundle.js',
@@ -24,23 +22,18 @@ export default {
   module: {
     rules: [
       {
-        test: /\.css$/,
-        use: ['style-loader', 'css-loader']
+        test: /\.tsx?$/,
+        use: 'ts-loader',
+        exclude: /node_modules/,
       },
       {
-        test: /\.(png|svg|jpg|jpeg|gif)$/i,
+        test: /\.(glb|gltf)$/,
         type: 'asset/resource',
-        generator: {
-          filename: 'images/[name][ext]'
-        }
       },
       {
-        // Removed .obj loader rule, as we are now using glTF files
-        // {
-        //   test: /\.obj$/,
-        //   use: ['./obj-loader.js']
-        // }
-      }
+        test: /\.(png|jpg|gif)$/i,
+        type: 'asset/resource',
+      },
     ]
   },
   plugins: [
@@ -74,23 +67,9 @@ export default {
   ],
   devtool: isProduction ? 'source-map' : 'eval-source-map',
   devServer: {
-    static: [
-      {
-        directory: path.join(__dirname, 'dist'),
-      },
-      // {
-      //   directory: path.join(__dirname, 'models'), // Old OBJ models, no longer directly served
-      //   publicPath: '/models',
-      // },
-      { // Serve processed models if needed for direct access (though usually loaded via manifest)
-        directory: path.join(__dirname, 'dist/models_optimized'),
-        publicPath: '/models_optimized',
-      },
-      { // Serve assets like the manifest
-        directory: path.join(__dirname, 'dist/assets'),
-        publicPath: '/assets',
-      }
-    ],
+    static: {
+      directory: path.join(__dirname, '/'),
+    },
     compress: true,
     port: 9002,
     hot: true,
@@ -101,7 +80,7 @@ export default {
     },
   },
   resolve: {
-    extensions: ['.js'],
+    extensions: ['.tsx', '.ts', '.js'],
     alias: {
       '@config': path.resolve(__dirname, 'js/config'),
       '@core': path.resolve(__dirname, 'js/core'),

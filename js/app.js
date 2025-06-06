@@ -308,3 +308,60 @@ if (!gameContext.HEADLESS_MODE) {
     }
 }
 })(); // Close the async IIFE
+
+import { GameState, TensorOps, DeterministicRNG } from '../src/trikeshed/core';
+import { GameEngine } from './core/gameEngine';
+import { ThreeRenderer } from './rendering/threeRenderer';
+import { UIManager } from './ui/uiManager';
+import { GameInitializer } from './core/gameInitializer.js';
+
+class Game {
+    constructor() {
+        // Initialize core systems
+        this.rng = new DeterministicRNG(Date.now());
+        this.gameState = new GameState(
+            TensorOps.create([1000, 1000], null) // 1000x1000 world grid
+        );
+        
+        // Initialize subsystems
+        this.engine = new GameEngine(this.gameState, this.rng);
+        this.renderer = new ThreeRenderer();
+        this.input = new InputManager();
+        this.ui = new UIManager();
+        
+        // Bind update loop
+        this.update = this.update.bind(this);
+        this.lastTime = 0;
+        
+        // Start game loop
+        requestAnimationFrame(this.update);
+    }
+    
+    update(currentTime) {
+        const deltaTime = (currentTime - this.lastTime) / 1000;
+        this.lastTime = currentTime;
+        
+        // Update game state
+        this.engine.update(deltaTime);
+        
+        // Render frame
+        this.renderer.render(this.gameState);
+        
+        // Update UI
+        this.ui.update(this.gameState);
+        
+        // Continue game loop
+        requestAnimationFrame(this.update);
+    }
+}
+
+// Initialize game when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    window.game = new Game();
+});
+
+// Initialize the game
+const gameInitializer = new GameInitializer();
+gameInitializer.initialize().catch(error => {
+    console.error("Failed to initialize game:", error);
+});

@@ -1,32 +1,27 @@
 {
-  "name": "rts-game",
-  "version": "1.0.0",
-  "description": "Real-time strategy game with WebGL rendering",
-  "main": "index.js",
-  "sideEffects": false,
+  "name": "rtsgame",
+  "version": "0.1.0",
+  "description": "Real-Time Strategy game with TrikeShed architecture and Computronium mechanics",
+  "main": "js/app.js",
   "scripts": {
-    "preprocess:models": "node scripts/convert-models.js",
-    "dev": "npm run preprocess:models && webpack serve --mode development --open",
-    "build": "npm run preprocess:models && webpack --mode production",
-    "start": "npm run preprocess:models && webpack serve --mode development"
+    "dev": "webpack serve --mode development",
+    "start": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "preprocess:models": "node scripts/preprocess-models.js"
   },
   "dependencies": {
-    "cannon-es": "^0.20.0",
-    "gl-matrix": "^3.4.3",
-    "three": "^0.160.0"
+    "three": "^0.162.0",
+    "immer": "^10.0.3",
+    "gl-matrix": "^3.4.3"
   },
   "devDependencies": {
-    "compression-webpack-plugin": "^11.1.0",
-    "html-entities": "^2.6.0",
-    "html-webpack-plugin": "^5.6.3",
-    "webpack": "^5.89.0",
+    "typescript": "^5.3.3",
+    "webpack": "^5.90.3",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^4.15.1",
-    "obj2gltf": "^3.1.4",
-    "gltf-pipeline": "^4.1.0",
-    "fs-extra": "^11.2.0",
-    "glob": "^10.3.10",
-    "copy-webpack-plugin": "^12.0.2"
+    "webpack-dev-server": "^5.0.2",
+    "ts-loader": "^9.5.1",
+    "@types/three": "^0.162.0",
+    "@types/node": "^20.11.24"
   },
   "keywords": [
     "webgl",

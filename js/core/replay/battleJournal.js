@@ -10,6 +10,9 @@ export class BattleJournal {
         this.isRecording = false;
         this.frameCount = 0;
         this.maxStorageSize = 50 * 1024 * 1024; // 50MB limit
+        this.frames = [];
+        this.events = [];
+        this.startTime = 0;
     }
 
     startRecording(battleConfig = {}) {
@@ -54,6 +57,9 @@ export class BattleJournal {
 
         this.isRecording = true;
         this.frameCount = 0;
+        this.frames = [];
+        this.events = [];
+        this.startTime = Date.now();
         
         console.log(`📹 Battle Journal: Recording started - ${this.currentBattle.id}`);
         console.log(`🎲 Deterministic seed: ${battleSeed}`);
@@ -751,6 +757,33 @@ export class BattleJournal {
         };
         
         return report;
+    }
+
+    loadReplay(replay) {
+        this.frames = replay.frames;
+        this.events = replay.events;
+        this.startTime = replay.timestamp;
+    }
+
+    exportReplay() {
+        return {
+            timestamp: this.startTime,
+            frames: this.frames,
+            events: this.events
+        };
+    }
+
+    getFrameAtTime(time) {
+        return this.frames.find(frame => frame.time >= time) || this.frames[this.frames.length - 1];
+    }
+
+    getEventsAtTime(time) {
+        return this.events.filter(event => event.time <= time);
+    }
+
+    getDuration() {
+        if (this.frames.length === 0) return 0;
+        return this.frames[this.frames.length - 1].time;
     }
 }
 
