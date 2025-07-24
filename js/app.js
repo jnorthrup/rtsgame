@@ -335,7 +335,7 @@ if (!gameContext.HEADLESS_MODE) {
 
 } // Close the HMR protection if block
 
-// import { GameState, TensorOps, DeterministicRNG } from '../src/trikeshed/core';
+import { createTensor, j as trikeJ } from 'trikeshed-ts'; // Updated import
 // import { GameEngine } from './core/gameEngine';
 // Moved these imports to prevent issues - they're not currently used anyway
 // import { ThreeRenderer } from './rendering/threeRenderer';
@@ -347,13 +347,17 @@ if (!gameContext.HEADLESS_MODE) {
 class Game {
     constructor() {
         // Initialize core systems
-        this.rng = new DeterministicRNG(Date.now());
-        this.gameState = new GameState(
-            TensorOps.create([1000, 1000], null) // 1000x1000 world grid
-        );
+        // this.rng = new DeterministicRNG(Date.now()); // Old TrikeShed
+        this.rng = { next: () => Math.random() }; // Placeholder for now
+        // this.gameState = new GameState( // Old TrikeShed
+        //     TensorOps.create([1000, 1000], null) // 1000x1000 world grid // Old TrikeShed
+        // );
+        this.gameState = createTensor([1000,1000], () => null); // Using updated import
+        const myJoin = trikeJ(1, 2); // Using updated import (aliased j to trikeJ)
+        console.log("Conceptual join from trikeshed-ts:", myJoin); // Updated log
         
         // Initialize subsystems
-        this.engine = new GameEngine(this.gameState, this.rng);
+        // this.engine = new GameEngine(this.gameState, this.rng); // GameEngine might need update for new TrikeShedCore
         this.renderer = new ThreeRenderer();
         this.input = new InputManager();
         this.ui = new UIManager();

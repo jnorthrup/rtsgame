@@ -12,19 +12,130 @@ import { TrikeShedEntityManager } from './trikeshedEntityManager.js';
 import { ComputroniumManager } from './computroniumManager.js';
 import { EnhancedCommandHierarchy } from './enhancedCommandHierarchy.js';
 
+// Import specific functions from trikeshed-ts
+import { createCursor, createTensor, j as trikeJ } from 'trikeshed-ts';
+
 // EntityManager class to manage all game entities
 export class EntityManager {
-    constructor() {
-        this.units = [];
+    constructor(maxEntities = 1000) { // Assuming a max number of entities for Tensor initialization
+        this.units = []; // Still used for storing full unit objects for now
         this.buildings = [];
+        this.nextEntityId = 0; // Simple ID generation for now
+        this.entityIdToIndex = new Map(); // Map entity ID to Tensor row index
+
+        // TODO: Determine appropriate initial size or make dynamic
+        // For now, initialize with a fixed max size and default values (e.g., 0,0 for position)
+        // Positions: entityId (row) -> [x, y]
+        this.unitPositions = createCursor(maxEntities, 2, () => 0.0); // Use createCursor from trikeshed-ts
+        // Health: entityId (row) -> [hp, maxHp]
+        this.unitHealth = createCursor(maxEntities, 2, () => 0.0);    // Use createCursor from trikeshed-ts
+
+        // Placeholder for other components if refactored
+        // this.unitTypes = createSeries(maxEntities, () => ''); // type as string
+        // this.unitTeams = createSeries(maxEntities, () => ''); // team as string
         this.projectiles = [];
         this.effects = [];
         this.captions = [];
     }
 
-    addUnit(unit) {
-        this.units.push(unit);
+    _getNewEntityIndex(entityId) {
+        if (this.entityIdToIndex.has(entityId)) {
+            return this.entityIdToIndex.get(entityId);
+        }
+        // This simple index assignment assumes entities are never removed or IDs are not reused in Tensors.
+        // A more robust system would manage free indices.
+        const index = this.entityIdToIndex.size;
+        if (index >= this.unitPositions.rows) { // Check against .rows of one of the tensors
+            console.error("EntityManager: Exceeded maximum entity capacity for Tensors.");
+            // TODO: Implement dynamic resizing or better error handling
+            return null;
+        }
+        this.entityIdToIndex.set(entityId, index);
+        return index;
     }
+
+    addUnit(unit) {
+        this.units.push(unit); // Keep full object for now for non-refactored properties
+
+        const entityIndex = this._getNewEntityIndex(unit.id);
+        if (entityIndex === null) return; // Max capacity reached
+
+        // Write initial position to TensorCursor
+        // For immutable Tensors, an update means creating a new Tensor.
+        // This is a simplified representation. A real implementation might batch updates or use a more sophisticated approach.
+        const currentUnitX = unit.x;
+        const currentUnitY = unit.y;
+        this.unitPositions = this.unitPositions.alpha((_value, coords) => {
+            if (coords[0] === entityIndex && coords[1] === 0) return currentUnitX;
+            if (coords[0] === entityIndex && coords[1] === 1) return currentUnitY;
+            return this.unitPositions.get(coords); // Get old value for other cells
+        });
+        console.log(`EntityManager: Added unit ${unit.id} at index ${entityIndex}. Position (${unit.x}, ${unit.y}) stored in Tensor.`);
+
+        // Write initial health to TensorCursor
+        const currentUnitHp = unit.hp;
+        const currentUnitMaxHp = unit.maxHp;
+        this.unitHealth = this.unitHealth.alpha((_value, coords) => {
+            if (coords[0] === entityIndex && coords[1] === 0) return currentUnitHp;
+            if (coords[0] === entityIndex && coords[1] === 1) return currentUnitMaxHp;
+            return this.unitHealth.get(coords); // Get old value
+        });
+        console.log(`EntityManager: Unit ${unit.id} health (${unit.hp}/${unit.maxHp}) stored in Tensor.`);
+    }
+
+    // Example getter for position (would be used by unit or other systems)
+    getUnitPosition(unitId) {
+        if (!this.entityIdToIndex.has(unitId)) return null;
+        const index = this.entityIdToIndex.get(unitId);
+        if (index === undefined) return null;
+        // Read from actual Tensor using trikeshed-ts API
+        return { x: this.unitPositions.get([index, 0]), y: this.unitPositions.get([index, 1]) };
+    }
+
+    // Example setter for position (would be called by unit's movement logic)
+    setUnitPosition(unitId, x, y) {
+        if (!this.entityIdToIndex.has(unitId)) return;
+        const index = this.entityIdToIndex.get(unitId);
+        if (index === undefined) return;
+
+        // Create a new tensor with the updated position
+        this.unitPositions = this.unitPositions.alpha((_value, coords) => {
+            if (coords[0] === index && coords[1] === 0) return x;
+            if (coords[0] === index && coords[1] === 1) return y;
+            return this.unitPositions.get(coords);
+        });
+        // console.log(`EntityManager: Unit ${unitId} position updated to (${x}, ${y}) in Tensor.`);
+
+        // Also update the original unit object if it's still being used as a partial source of truth
+        const unit = this.units.find(u => u.id === unitId);
+        if (unit) { unit.x = x; unit.y = y; }
+    }
+
+    // Example getter for health
+    getUnitHealth(unitId) {
+        if (!this.entityIdToIndex.has(unitId)) return null;
+        const index = this.entityIdToIndex.get(unitId);
+        if (index === undefined) return null;
+        return { hp: this.unitHealth.get([index, 0]), maxHp: this.unitHealth.get([index, 1]) };
+    }
+
+    // Example setter for health
+    setUnitHealth(unitId, hp, maxHp) {
+        if (!this.entityIdToIndex.has(unitId)) return;
+        const index = this.entityIdToIndex.get(unitId);
+        if (index === undefined) return;
+
+        this.unitHealth = this.unitHealth.alpha((_value, coords) => {
+            if (coords[0] === index && coords[1] === 0) return hp;
+            if (coords[0] === index && coords[1] === 1) return maxHp; // maxHp might not change often
+            return this.unitHealth.get(coords);
+        });
+        // console.log(`EntityManager: Unit ${unitId} health updated to (${hp}/${maxHp}) in Tensor.`);
+
+        const unit = this.units.find(u => u.id === unitId);
+        if (unit) { unit.hp = hp; unit.maxHp = maxHp; }
+    }
+
 
     addBuilding(building) {
         this.buildings.push(building);
@@ -46,10 +157,26 @@ export class EntityManager {
         // Update units
         for (let i = this.units.length - 1; i >= 0; i--) {
             const unit = this.units[i];
+
+            // Before unit.update, sync unit's state from Tensors
+            // This ensures the unit object has the latest data if other systems modified it via EntityManager
+            const posData = this.getUnitPosition(unit.id);
+            if (posData) { unit.x = posData.x; unit.y = posData.y; }
+            const healthData = this.getUnitHealth(unit.id);
+            if (healthData) { unit.hp = healthData.hp; unit.maxHp = healthData.maxHp; }
+
             unit.update(simulation, deltaTime);
-            
-            if (unit.hp <= 0 || unit.isDead) {
+
+            // After unit.update, sync unit's state (potentially changed by its logic) back to Tensors
+            this.setUnitPosition(unit.id, unit.x, unit.y);
+            this.setUnitHealth(unit.id, unit.hp, unit.maxHp);
+
+            // Death check using data from tensor (or the synced unit object)
+            const currentHealth = this.getUnitHealth(unit.id); // Read fresh from tensor
+            if ((currentHealth && currentHealth.hp <= 0) || unit.isDead) {
                 this.units.splice(i, 1);
+                this.entityIdToIndex.delete(unit.id); // Mark index as free / remove mapping
+                // TODO: A more robust index management system would be needed for freeing/reusing indices in Tensors.
                 
                 // Check for commander death (game over condition)
                 if (unit.type === UNIT_TYPES.commander) {
