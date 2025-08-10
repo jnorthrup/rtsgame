@@ -5,3 +5,17 @@ node_modules
 .claude/
 .idea/
 package-lock.json
+
+# Gradle build artifacts
+.gradle/
+build/
+gradle-install/
+gradle.zip
+
+# IDE files
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
