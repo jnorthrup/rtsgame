@@ -216,12 +216,15 @@ describe('Building', () => {
 
   describe('Update: Production', () => {
     let factory;
-    const unitToProduce = UNIT_TYPES.testUnit; // Has cost {mass:25, energy:25}, buildTime: 5s
+      let unitToProduce; // Will be assigned in beforeEach when UNIT_TYPES.testUnit is initialized
 
     beforeEach(() => {
       factory = new Building(100,100,'blue', BUILDING_TYPES.factory, mockSim);
       mockSim.gameState.resources.blue = { mass: 100, energy: 100, massIncome:0, energyIncome:0 }; // Sufficient resources
       mockSim.seedRandom.random.mockReturnValue(0.01); // Ensure auto-production queueing condition (random < 0.02) is met
+
+        // Ensure unitToProduce points to the fixture used for production
+        unitToProduce = UNIT_TYPES.testUnit;
     });
 
     it('should add a unit to production queue if resources are available (auto-production)', () => {

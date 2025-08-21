@@ -439,9 +439,10 @@ describe('Unit', () => {
 
   describe('Support Role: Construction (Commander/Engineer)', () => {
     let commander;
-    const buildableBuildingType = BUILDING_TYPES.factory; // Defined in beforeEach
+    let buildableBuildingType; // Assigned in beforeEach after BUILDING_TYPES.factory is initialized
 
     beforeEach(() => {
+      buildableBuildingType = BUILDING_TYPES.factory;
       // Ensure commander type has build list and build rate
       UNIT_TYPES.commander.buildList = [buildableBuildingType];
       UNIT_TYPES.commander.buildRate = 1; // 1 progress per second

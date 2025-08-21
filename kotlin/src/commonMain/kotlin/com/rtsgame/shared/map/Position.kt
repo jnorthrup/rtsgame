@@ -17,7 +17,9 @@ data class Position(
         val dx = other.x - x
         val dy = other.y - y
         val length = distanceTo(other)
-        return if (length > 0) {
+        // guard against very small lengths to avoid numerical instability
+        val eps = 1e-6f
+        return if (length > eps) {
             Position(dx / length, dy / length)
         } else {
             Position(0f, 0f)

@@ -259,10 +259,25 @@ async function runTests() {
 }
 
 // Trigger test run
-runTests().catch(e => {
-    console.error("Critical error running strategicAI.js tests:", e.message);
-    // This is to catch errors from the runTests function itself, not just individual test failures
-});
+// If running under Jest, register a single Jest test that invokes the legacy runner.
+if (typeof globalThis !== 'undefined' && typeof globalThis.test === 'function') {
+    if (globalThis.describe) {
+        globalThis.describe('legacy strategicAI.test.js runner', () => {
+            globalThis.test('runs legacy strategicAI tests', async () => {
+                await runTests();
+            });
+        });
+    } else {
+        globalThis.test('runs legacy strategicAI tests', async () => {
+            await runTests();
+        });
+    }
+} else {
+    // Non-Jest fallback: run immediately
+    runTests().catch(e => {
+        console.error("Critical error running strategicAI.js tests:", e.message);
+    });
+}
 
 // Placeholder for trade logic tests from previous subtasks (if any)
 // test('executeTrade: successful BUY mass', () => { /* ... */ });

@@ -3,7 +3,10 @@ package rtsgame.core
 import kotlin.math.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.channels.*
 import kotlin.time.*
+import kotlin.time.Duration.Companion.milliseconds
+import rtsgame.compat.PlatformInline
 
 /**
  * Ultra-dense RTS core using functional composition and type-level programming
@@ -35,19 +38,35 @@ sealed class Cmd {
 typealias Effect<T> = suspend (World) -> Pair<World, T>
 typealias System = suspend (World, Duration) -> World
 
-// Dense component definitions using inline classes
-@JvmInline value class Pos(val vec: Vec3)
-@JvmInline value class Vel(val vec: Vec3)
-@JvmInline value class HP(val value: Pair<Float, Float>) // current, max
-@JvmInline value class Team(val id: Int)
-@JvmInline value class Dmg(val value: Float)
-@JvmInline value class Range(val value: Float)
+// Dense component definitions using value classes (portable)
+@JvmInline
+value class Pos(val vec: Vec3)
+@JvmInline
+value class Vel(val vec: Vec3)
+@JvmInline
+value class HP(val value: Pair<Float, Float>) // current, max
+@JvmInline
+value class Team(val id: Int)
+@JvmInline
+value class Dmg(val value: Float)
+@JvmInline
+value class Range(val value: Float)
+
+// Legacy component aliases for MainJvm compatibility
+typealias CommandComponent = String
+typealias PositionComponent = Pos
+typealias OwnerComponent = Team
+typealias EntityTypeComponent = String
+typealias ComponentTypeId = String
 
 // Component lens operators
 inline operator fun <reified T> Entity.get(key: String): T? = this[key] as? T
-inline operator fun Entity.plus(pair: Pair<String, Component>): Entity = this + pair
+// Avoid recursive call to the same operator; delegate to standard Map+ overload by wrapping into a Map
+@JvmName("entityPlus")
+inline operator fun Entity.plus(pair: Pair<String, Component>): Entity = this + mapOf(pair)
 inline operator fun World.get(id: EntityId): Entity? = this[id]
-inline operator fun World.plus(pair: Pair<EntityId, Entity>): World = this + pair
+@JvmName("worldPlus")
+inline operator fun World.plus(pair: Pair<EntityId, Entity>): World = this + mapOf(pair)
 
 // Functional entity queries
 inline fun <reified T> World.with(component: String): Sequence<Pair<EntityId, T>> =
@@ -104,10 +123,11 @@ object Game {
     
     // System combinators
     val movement: System = { world, dt ->
+        val secondsFactor = dt.inWholeMilliseconds.toFloat() / 1000f
         world.with<Vel>("vel").fold(world) { w, (id, vel) ->
             w.update(id) { entity ->
                 val pos = entity.get<Pos>("pos") ?: return@update entity
-                entity + ("pos" to Pos(pos.vec + vel.vec * dt.inWholeMilliseconds / 1000f))
+                entity + ("pos" to Pos(pos.vec + vel.vec * secondsFactor))
             }
         }
     }
@@ -132,7 +152,7 @@ object Game {
             if (target != null) {
                 w.update(target) { t ->
                     val hp = t.get<HP>("hp") ?: return@update t
-                    val newHp = hp.value.first - dmg.value * dt.inWholeMilliseconds / 1000f
+                    val newHp = hp.value.first - dmg.value * (dt.inWholeMilliseconds.toFloat() / 1000f)
                     if (newHp <= 0) t - "hp"
                     else t + ("hp" to HP(newHp to hp.value.second))
                 }
@@ -147,30 +167,35 @@ object Game {
     fun gameLoop(
         initialWorld: World,
         commands: Flow<Cmd>,
-        tickRate: Duration = 16.milliseconds
+    tickRate: Duration = 16.milliseconds
     ): Flow<World> = flow {
         var world = initialWorld
-        val cmdChannel = commands.produceIn(this)
-        
-        while (currentCoroutineContext().isActive) {
-            val startTime = System.currentTimeMillis()
-            
-            // Process all pending commands
-            while (!cmdChannel.isEmpty) {
-                val cmd = cmdChannel.tryReceive().getOrNull() ?: break
-                world = interpret(cmd)(world).first
+
+        // Use a child scope for the producer channel
+        coroutineScope {
+            val cmdChannel = commands.produceIn(this)
+
+            while (currentCoroutineContext().isActive) {
+                val startTime = TimeUtils.currentTimeMillis()
+
+                // Process all pending commands
+                while (!cmdChannel.isEmpty) {
+                    val cmd = cmdChannel.tryReceive().getOrNull() ?: break
+                    world = interpret(cmd)(world).first
+                }
+
+                // Run all systems
+                world = systems.fold(world) { w, system ->
+                    system(w, tickRate)
+                }
+
+                emit(world)
+
+                // Frame timing
+                val elapsed = TimeUtils.currentTimeMillis() - startTime
+                val wait = (tickRate.inWholeMilliseconds - elapsed).coerceAtLeast(0L)
+                kotlinx.coroutines.delay(wait)
             }
-            
-            // Run all systems
-            world = systems.fold(world) { w, system ->
-                system(w, tickRate)
-            }
-            
-            emit(world)
-            
-            // Frame timing
-            val elapsed = System.currentTimeMillis() - startTime
-            delay((tickRate.inWholeMilliseconds - elapsed).coerceAtLeast(0))
         }
     }
 }
@@ -300,16 +325,18 @@ object AI {
     // Simple aggressive AI
     val aggressive: suspend (World, Team) -> List<Cmd> = { world, team ->
         world.with<Team>("team")
-            .filter { (_, t) -> t.id == team.id }
-            .mapNotNull { (id, _) ->
+            .filter { entry: Pair<EntityId, Team> -> entry.second.id == team.id }
+            .mapNotNull { pair: Pair<EntityId, Team> ->
+                val id = pair.first
                 val entity = world[id] ?: return@mapNotNull null
                 val pos = entity.get<Pos>("pos")?.vec ?: return@mapNotNull null
                 
                 // Find nearest enemy
                 val enemy = world.with<Team>("team")
-                    .filter { (_, t) -> t.id != team.id }
-                    .mapNotNull { (enemyId, _) ->
-                        world[enemyId]?.get<Pos>("pos")?.let { 
+                    .filter { entry: Pair<EntityId, Team> -> entry.second.id != team.id }
+                    .mapNotNull { entry: Pair<EntityId, Team> ->
+                        val enemyId = entry.first
+                        world[enemyId]?.get<Pos>("pos")?.let {
                             enemyId to it.vec.dist(pos)
                         }
                     }
@@ -364,4 +391,52 @@ suspend fun example() {
     Game.gameLoop(world, commands).collect { newWorld ->
         println("Entities: ${newWorld.size}")
     }
+}
+
+// Dense RTS Game class for integration
+class DenseRTSGame(
+    initialWorld: World = emptyMap()
+) {
+    private val _world = MutableStateFlow(initialWorld)
+    val world: StateFlow<World> = _world.asStateFlow()
+    
+    private val commandChannel = Channel<Cmd>(Channel.UNLIMITED)
+    
+    // Game loop
+    suspend fun start() {
+        Game.gameLoop(_world.value, commandChannel.receiveAsFlow()).collect { newWorld ->
+            _world.value = newWorld
+        }
+    }
+    
+    // Command interface
+    suspend fun executeCommand(cmd: Cmd) {
+        commandChannel.send(cmd)
+    }
+    
+    // Convenience methods
+    suspend fun spawnUnit(type: String, team: Int, pos: Vec3) {
+        executeCommand(Cmd.Spawn(type, team, pos))
+    }
+    
+    suspend fun moveUnit(id: EntityId, pos: Vec3) {
+        executeCommand(Cmd.Move(id, pos))
+    }
+}
+
+// Minimal launcher compatibility
+class RTSGameLauncher {
+    private val game = DenseRTSGame()
+    
+    suspend fun start() = game.start()
+    
+    val world get() = game.world
+    
+    suspend fun executeCommand(cmd: Cmd) = game.executeCommand(cmd)
+}
+
+// Launcher function for main compatibility
+suspend fun launchRTSGame() {
+    val launcher = RTSGameLauncher()
+    launcher.start()
 }

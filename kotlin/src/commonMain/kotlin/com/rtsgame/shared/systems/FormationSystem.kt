@@ -126,11 +126,14 @@ class FormationSystem(internal val config: FormationConfig) {
     }
 
     internal fun calculateSeparationForce(unit: Unit): Position {
+        // Backwards-compatible: default to no nearby units
+        return calculateSeparationForce(unit, emptyList())
+    }
+
+    // Testable variant: accepts nearby units so unit tests can inject neighbors.
+    internal fun calculateSeparationForce(unit: Unit, nearbyUnits: List<Unit>): Position {
         var force = Position(0f, 0f)
         val neighborRadius = DEFAULT_UNIT_SIZE * config.neighborRadiusFactor
-
-        // TODO: Get nearby units from game state
-        val nearbyUnits = emptyList<Unit>() // Placeholder
 
         for (other in nearbyUnits) {
             if (other == unit) continue
@@ -138,9 +141,11 @@ class FormationSystem(internal val config: FormationConfig) {
             val toUnit = unit.position - other.position
             val distance = sqrt(toUnit.x * toUnit.x + toUnit.y * toUnit.y)
 
-            if (distance < neighborRadius) {
+            if (distance > 0f && distance < neighborRadius) {
                 val strength = 1f - (distance / neighborRadius)
-                force = force + toUnit * (strength / distance)
+                // Avoid division by zero; scale by normalized direction
+                val normalized = toUnit * (1f / distance)
+                force = force + normalized * strength
             }
         }
 

@@ -1,0 +1,10 @@
+abi_version=1.8.0
+builtins_platform=JS
+compiler_version=1.9.20-dev-9102
+depends=kotlin
+ir_signature_versions=1,2
+jsOutputName=kotlin-kotlin-test-kotlin-test-js-ir
+metadata_version=1.4.1
+serializedIrFileFingerprints=3fmg070nue1aa.1zor9c2wbh9gx 3ghlb8ki5umd5.36jc1fd32wdzz 22njdbjgz2ni1.2hvga8flqc7cm 1ks2sd6dx8wdg.2hqzn6xu7cv66 2mi9k0rfn3zey.2pk811mpcmwz8 1w25k1ge6h7zk.1yy8epf0hsp50 316q4v4xieaax.130pa6kei0isf 1ryib4yaxfweo.2k8vf2y8rvv6c ecyar678taxl.12co0blcpry19 2ge7g1g0y0453.1yklpjn7ukloj 6ojzylhod3jp.176ddjpgtpmb9 1tzjkjv6hpoew.nli0g87ezupd 2z7xz50u4j4l.26sigtsf4i4cr 3auzi2nlryogn.37t33im3qbkpk 2ji1dex93vz1u.15dks95lx1x2m 38hlt0ay4eyv1.2kyc6gmznbusr
+serializedKlibFingerprint=1i1d9ihrgi3n3.y70ond99bxar
+unique_name=kotlin-test

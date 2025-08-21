@@ -91,8 +91,12 @@ export class BattleJournal {
     }
 
     captureFrameData(gameContext) {
-        const { units, buildings, resources, gameState, camera } = gameContext;
-        
+        const units = (gameContext && gameContext.units) || [];
+        const buildings = (gameContext && gameContext.buildings) || [];
+        const resources = (gameContext && gameContext.resources) || { blue: { mass: 0, energy: 0 }, red: { mass: 0, energy: 0 } };
+        const gameState = (gameContext && gameContext.gameState) || { gameTime: 0 };
+        const camera = (gameContext && gameContext.camera) || { x: 0, y: 0, zoom: 1 };
+
         return {
             time: gameState.gameTime,
             frame: this.frameCount,
@@ -147,12 +151,13 @@ export class BattleJournal {
     }
 
     calculateFrameMetrics(gameContext) {
-        const { units, buildings } = gameContext;
-        
+        const units = (gameContext && gameContext.units) || [];
+        const buildings = (gameContext && gameContext.buildings) || [];
+
         const activeCombats = units.filter(u => u.target && u.target.hp > 0).length;
         const idleUnits = units.filter(u => !u.target && !u.patrolTarget && !u.constructionTask).length;
         const buildingProgress = buildings.reduce((sum, b) => sum + (b.productionProgress || 0), 0);
-        
+
         return {
             activeCombats,
             idleUnits,

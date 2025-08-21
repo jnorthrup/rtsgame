@@ -1,6 +1,6 @@
 plugins {
-    kotlin("multiplatform")
-    kotlin("plugin.serialization")
+    kotlin("multiplatform") version "1.9.22"
+    kotlin("plugin.serialization") version "1.9.22"
 }
 
 group = "com.rtsgame"
@@ -31,7 +31,7 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
                 implementation("org.jetbrains.kotlin:kotlin-reflect:1.9.22")
-                implementation(project(":trikeshed-lib"))
+                
             }
         }
         
@@ -65,54 +65,5 @@ tasks.register<JavaExec>("runJvm") {
     description = "Run the RTS game on JVM"
     classpath = kotlin.jvm().compilations.getByName("main").output.allOutputs +
                 kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles
-    mainClass.set("rtsgame.MainKt")
-}
-
-// Dense RTS launcher
-tasks.register<JavaExec>("runDense") {
-    group = "application"
-    description = "Run the Dense RTS implementation"
-    classpath = kotlin.jvm().compilations.getByName("main").output.allOutputs +
-                kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles
-    mainClass.set("rtsgame.core.DenseLauncherKt")
-}
-
-// Concentric Network RTS launcher
-tasks.register<JavaExec>("runRTS") {
-    group = "application"
-    description = "Run the RTS game with concentric network"
-    classpath = kotlin.jvm().compilations.getByName("main").output.allOutputs +
-                kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles
-    mainClass.set("rtsgame.RTSLauncherKt")
-    args = listOf("demo")
-}
-
-// Solo game task
-tasks.register<JavaExec>("runSolo") {
-    group = "application"
-    description = "Run solo RTS game"
-    classpath = kotlin.jvm().compilations.getByName("main").output.allOutputs +
-                kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles
-    mainClass.set("rtsgame.RTSLauncherKt")
-    args = listOf("solo")
-}
-
-// Host multiplayer task
-tasks.register<JavaExec>("runHost") {
-    group = "application"
-    description = "Host multiplayer RTS game"
-    classpath = kotlin.jvm().compilations.getByName("main").output.allOutputs +
-                kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles
-    mainClass.set("rtsgame.RTSLauncherKt")
-    args = listOf("host")
-}
-
-// Join multiplayer task
-tasks.register<JavaExec>("runJoin") {
-    group = "application"
-    description = "Join multiplayer RTS game"
-    classpath = kotlin.jvm().compilations.getByName("main").output.allOutputs +
-                kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles
-    mainClass.set("rtsgame.RTSLauncherKt")
-    args = listOf("join")
+    mainClass.set("rtsgame.RTSGameLauncherKt")
 }

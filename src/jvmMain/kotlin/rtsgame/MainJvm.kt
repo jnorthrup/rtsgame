@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import javax.swing.*
 import java.awt.*
 import java.awt.event.*
+import rtsgame.core.*
 
 actual fun platformMain() {
     println("🚀 Starting RTS Game on JVM")
@@ -77,11 +78,14 @@ private fun handleMouseClick(x: Float, y: Float, launcher: RTSGameLauncher) {
     // Convert screen coordinates to world coordinates
     val worldX = x * 2f // Simple scaling
     val worldY = y * 2f
-    
-    // Issue move command to selected units
-    val selectedUnits = listOf(EntityId(0)) // TODO: Implement unit selection
-    val moveCommand = CommandComponent("move", targetX = worldX, targetY = worldY)
-    launcher.simulation.issueCommand(selectedUnits, moveCommand)
+
+    // Issue move command to selected units (fire-and-forget coroutine)
+    val selectedUnits = listOf(0) // TODO: Implement unit selection; EntityId is Int
+    GlobalScope.launch {
+        selectedUnits.forEach { id ->
+            launcher.executeCommand(Cmd.Move(id, Vec3(worldX, worldY, 0f)))
+        }
+    }
 }
 
 private fun handleMouseRelease(x: Float, y: Float, launcher: RTSGameLauncher) {
@@ -95,49 +99,38 @@ private fun handleMouseMove(x: Float, y: Float, launcher: RTSGameLauncher) {
 private fun renderGameState(g2d: Graphics2D, launcher: RTSGameLauncher) {
     // Clear background
     g2d.color = Color(20, 20, 40)
-    g2d.fillRect(0, 0, width, height)
-    
-    // Render entities
-    val world = launcher.simulation.world
-    val entities = world.getAllEntities()
-    
-    entities.forEach { entityId ->
-        val position = world.getComponent<PositionComponent>(entityId, ComponentTypeId.POSITION)
-        val owner = world.getComponent<OwnerComponent>(entityId, ComponentTypeId.OWNER)
-        val entityType = world.getComponent<EntityTypeComponent>(entityId, ComponentTypeId.ENTITY_TYPE)
-        
-        if (position != null && owner != null && entityType != null) {
-            // Convert world coordinates to screen coordinates
-            val screenX = (position.x / 2f).toInt()
-            val screenY = (position.y / 2f).toInt()
-            
-            // Choose color based on team
-            g2d.color = when (owner.teamId) {
+    g2d.fillRect(0, 0, 1024, 768)
+
+    // Render entities from the common World's structure
+    val worldMap = launcher.world.value
+
+    worldMap.forEach { (entityId, entity) ->
+        val pos = entity["pos"] as? Pos
+        val team = entity["team"] as? Team
+        val type = entity["type"] as? String
+
+        if (pos != null && team != null && type != null) {
+            val screenX = (pos.vec.first / 2f).toInt()
+            val screenY = (pos.vec.second / 2f).toInt()
+
+            g2d.color = when (team.id) {
                 1 -> Color.BLUE
                 2 -> Color.RED
                 else -> Color.GRAY
             }
-            
-            // Draw entity
-            when (entityType.category) {
-                "unit" -> {
-                    g2d.fillOval(screenX - 5, screenY - 5, 10, 10)
-                }
-                "building" -> {
-                    g2d.fillRect(screenX - 8, screenY - 8, 16, 16)
-                }
-                else -> {
-                    g2d.fillOval(screenX - 3, screenY - 3, 6, 6)
-                }
+
+            when (type) {
+                "unit" -> g2d.fillOval(screenX - 5, screenY - 5, 10, 10)
+                "building" -> g2d.fillRect(screenX - 8, screenY - 8, 16, 16)
+                else -> g2d.fillOval(screenX - 3, screenY - 3, 6, 6)
             }
-            
-            // Draw entity type label
+
             g2d.color = Color.WHITE
             g2d.font = Font("Arial", Font.PLAIN, 10)
-            g2d.drawString(entityType.name, screenX + 8, screenY)
+            g2d.drawString(type, screenX + 8, screenY)
         }
     }
-    
+
     // Draw UI
     drawUI(g2d, launcher)
 }
@@ -146,10 +139,11 @@ private fun drawUI(g2d: Graphics2D, launcher: RTSGameLauncher) {
     g2d.color = Color.WHITE
     g2d.font = Font("Arial", Font.BOLD, 14)
     
+    val worldMap = launcher.world.value
     val stats = """
-        Entities: ${launcher.simulation.getEntityCount()}
-        Tick: ${launcher.simulation.currentTick}
-        Update Time: ${launcher.simulation.updateTime / 1_000_000}ms
+        Entities: ${worldMap.size}
+        Tick: 0
+        Update Time: 0ms
     """.trimIndent()
     
     val lines = stats.split("\n")

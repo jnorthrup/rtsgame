@@ -1,11 +1,11 @@
-package rtsgame
+package rtsgame.native
 
 import kotlinx.coroutines.*
 import kotlinx.datetime.*
 
 // Top-level data classes for minimal flow mode
-data class GameState(
-    val entities: MutableList<GameEntity> = mutableListOf(),
+data class NativeGameState(
+    val entities: MutableList<NativeGameEntity> = mutableListOf(),
     var currentTime: Long = 0L,
     val resources: Map<String, Int> = mapOf(
         "gold" to 1000,
@@ -14,15 +14,15 @@ data class GameState(
     )
 )
 
-data class GameEntity(
+data class NativeGameEntity(
     val id: String,
     val type: String,
-    val position: Position,
+    val position: NativePosition,
     val health: Int = 100,
     val playerId: Int = 1
 )
 
-data class Position(val x: Float, val y: Float, val z: Float = 0f)
+data class NativePosition(val x: Float, val y: Float, val z: Float = 0f)
 
 /**
  * Native macOS entry point for RTS Game Flow Mode
@@ -44,13 +44,13 @@ suspend fun runFlowModeDemo() {
     println("🌊 Initializing Flow Mode...")
     
     // Simple game state
-    val gameState = GameState()
+    val gameState = NativeGameState()
     
     // Add some initial entities
-    gameState.entities.addAll(listOf(
-        GameEntity("unit1", "scout", Position(10f, 20f), 100, 1),
-        GameEntity("unit2", "warrior", Position(30f, 40f), 150, 1),
-        GameEntity("unit3", "enemy", Position(50f, 60f), 120, 2)
+        gameState.entities.addAll(listOf(
+        NativeGameEntity("unit1", "scout", NativePosition(10f, 20f), 100, 1),
+        NativeGameEntity("unit2", "warrior", NativePosition(30f, 40f), 150, 1),
+        NativeGameEntity("unit3", "enemy", NativePosition(50f, 60f), 120, 2)
     ))
     
     println("✅ Game state initialized with ${gameState.entities.size} entities")
@@ -65,7 +65,7 @@ suspend fun runFlowModeDemo() {
         gameState.entities.forEach { entity ->
             val newX = entity.position.x + (if (entity.playerId == 1) 1f else -1f)
             val newY = entity.position.y + 0.5f
-            val newPosition = Position(newX, newY, entity.position.z)
+            val newPosition = NativePosition(newX, newY, entity.position.z)
             
             // Update entity position
             val index = gameState.entities.indexOfFirst { it.id == entity.id }

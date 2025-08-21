@@ -1,9 +1,6 @@
 package rtsgame.core
 
-import kotlin.system.getTimeMillis
-import kotlin.system.getTimeNanos
-
 actual object PlatformTime {
-    actual fun nanoTime(): Long = getTimeNanos()
-    actual fun currentTimeMillis(): Long = getTimeMillis()
-} 
+    actual fun nanoTime(): Long = java.lang.System.nanoTime()
+    actual fun currentTimeMillis(): Long = java.lang.System.currentTimeMillis()
+}

@@ -196,9 +196,9 @@ object ModelLoader {
         val indices = mutableListOf<Int>()
         
         // Tank body
-        val bodyHeight = 0.3f
-        val bodyLength = 0.8f
-        val bodyWidth = 0.5f
+    val bodyHeight = 0.3f
+    val bodyLength = 0.8f
+    val bodyWidth = 0.5f
         
         val positions = listOf(
             Vec3(-bodyLength/2, 0f, -bodyWidth/2),
@@ -268,7 +268,7 @@ object ModelLoader {
         
         // Generate cylinder vertices
         for (i in 0 until segments) {
-            val angle = (i.toFloat() / segments) * PI * 2
+                val angle = (i.toFloat() / segments) * PI.toFloat() * 2f
             val x = cos(angle) * radius
             val z = sin(angle) * radius
             
@@ -346,7 +346,7 @@ object DenseRenderer {
             val translation = Mat4.translation(pos)
             val scale = Mat4.scale(asset.scale)
             val rotation = Mat4.rotation(
-                angle = System.currentTimeMillis() * 0.001f + id * 0.5f,
+                angle = TimeUtils.currentTimeMillis() * 0.001f + id * 0.5f,
                 axis = Vec3(0f, 1f, 0f)
             )
             

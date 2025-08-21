@@ -1,11 +1,8 @@
 package rtsgame.compat
 
-actual fun currentTimeMillis(): Long = System.currentTimeMillis()
+actual fun currentTimeMillis(): Long = java.lang.System.currentTimeMillis()
 
-actual fun platformMain() {
-    println("RTS Game JVM Platform")
-}
+actual fun formatFloat(value: Float, precision: Int): String = "%.*f".format(precision, value)
 
-actual fun formatFloat(value: Float, precision: Int): String = "%.${precision}f".format(value)
-
-actual typealias PlatformInline = JvmInline
+// JVM platform inline marker
+actual annotation class PlatformInline()

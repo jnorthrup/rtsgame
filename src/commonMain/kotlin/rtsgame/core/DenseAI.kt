@@ -11,7 +11,7 @@ import kotlin.random.Random
 
 // AI types
 typealias Perception = (World, EntityId) -> Map<String, Any>
-typealias Decision = suspend (Map<String, Any>) -> Cmd?
+typealias Decision = (Map<String, Any>) -> Cmd?
 typealias Behavior = Pair<Perception, Decision>
 
 // Spatial reasoning
@@ -26,27 +26,29 @@ data class SpatialContext(
 // Tactical primitives
 object Tactics {
     // Perception functions
-    val spatial: Perception = { world, id ->
-        val entity = world[id] ?: return@spatial emptyMap()
-        val pos = entity.get<Pos>("pos")?.vec ?: return@spatial emptyMap()
-        val team = entity.get<Team>("team")?.id ?: return@spatial emptyMap()
+    val spatial: Perception = spatialLbl@ { world, id ->
+    val entity = world[id] ?: return@spatialLbl emptyMap()
+    val pos = entity.get<Pos>("pos")?.vec ?: return@spatialLbl emptyMap()
+    val team = entity.get<Team>("team")?.id ?: return@spatialLbl emptyMap()
         
         val allies = world.with<Team>("team")
-            .filter { (_, t) -> t.id == team }
-            .mapNotNull { (otherId, _) ->
+            .filter { entry: Pair<EntityId, Team> -> entry.second.id == team }
+            .mapNotNull { entry: Pair<EntityId, Team> ->
+                val otherId = entry.first
                 if (otherId == id) return@mapNotNull null
-                world[otherId]?.get<Pos>("pos")?.vec?.let {
-                    otherId to pos.dist(it)
+                world[otherId]?.get<Pos>("pos")?.vec?.let { otherPos ->
+                    otherId to pos.dist(otherPos)
                 }
             }
             .sortedBy { it.second }
             .take(5)
         
         val enemies = world.with<Team>("team")
-            .filter { (_, t) -> t.id != team }
-            .mapNotNull { (enemyId, _) ->
-                world[enemyId]?.get<Pos>("pos")?.vec?.let {
-                    enemyId to pos.dist(it)
+            .filter { entry: Pair<EntityId, Team> -> entry.second.id != team }
+            .mapNotNull { entry: Pair<EntityId, Team> ->
+                val enemyId = entry.first
+                world[enemyId]?.get<Pos>("pos")?.vec?.let { enemyPos ->
+                    enemyId to pos.dist(enemyPos)
                 }
             }
             .sortedBy { it.second }
@@ -61,14 +63,14 @@ object Tactics {
         )
     }
     
-    val economic: Perception = { world, id ->
-        val entity = world[id] ?: return@economic emptyMap()
-        val pos = entity.get<Pos>("pos")?.vec ?: return@economic emptyMap()
+    val economic: Perception = economicLbl@ { world, id ->
+        val entity = world[id] ?: return@economicLbl emptyMap()
+        val pos = entity.get<Pos>("pos")?.vec ?: return@economicLbl emptyMap()
         
         val resources = world.asSequence()
-            .filter { (_, e) -> e["type"] == "resource" }
-            .mapNotNull { (_, e) ->
-                e.get<Pos>("pos")?.vec?.let { it to pos.dist(it) }
+            .filter { (_, ent): Map.Entry<EntityId, Entity> -> ent["type"] == "resource" }
+            .mapNotNull { (_, ent): Map.Entry<EntityId, Entity> ->
+                ent.get<Pos>("pos")?.vec?.let { resourcePos -> resourcePos to pos.dist(resourcePos) }
             }
             .sortedBy { it.second }
             .take(3)
@@ -81,9 +83,9 @@ object Tactics {
     }
     
     // Decision functions
-    val fight: Decision = { perception ->
-        val enemies = perception["enemies"] as? List<Pair<EntityId, Float>> ?: return@fight null
-        val pos = perception["pos"] as? Vec3 ?: return@fight null
+    val fight: Decision = fightLbl@ { perception ->
+    val enemies = perception["enemies"] as? List<Pair<EntityId, Float>> ?: return@fightLbl null
+    val pos = perception["pos"] as? Vec3 ?: return@fightLbl null
         
         enemies.firstOrNull()?.let { (target, dist) ->
             if (dist < 50f) {
@@ -96,16 +98,17 @@ object Tactics {
         }
     }
     
-    val flee: Decision = { perception ->
+    val flee: Decision = fleeLbl@ { perception ->
         val threat = perception["threat"] as? Int ?: 0
         if (threat > 2) {
-            val pos = perception["pos"] as? Vec3 ?: return@flee null
-            val enemies = perception["enemies"] as? List<Pair<EntityId, Float>> ?: return@flee null
+            val pos = perception["pos"] as? Vec3 ?: return@fleeLbl null
+            val enemies = perception["enemies"] as? List<Pair<EntityId, Float>> ?: return@fleeLbl null
             
             // Calculate escape vector
-            val escapeVector = enemies.fold(Vec3(0f, 0f, 0f)) { acc, (_, dist) ->
-                val weight = 1f / (dist + 1f)
-                acc + pos * weight
+        val escapeVector = enemies.fold(Vec3(0f, 0f, 0f)) { acc: Vec3, pair: Pair<EntityId, Float> ->
+            val dist = pair.second
+            val weight = 1f / (dist + 1f)
+            acc + pos * weight
             }.let { 
                 if (it != Vec3(0f, 0f, 0f)) it * -1f
                 else Vec3(Random.nextFloat() - 0.5f, Random.nextFloat() - 0.5f, 0f)
@@ -115,8 +118,8 @@ object Tactics {
         } else null
     }
     
-    val gather: Decision = { perception ->
-        val resources = perception["resources"] as? List<Pair<Vec3, Float>> ?: return@gather null
+    val gather: Decision = gatherLbl@ { perception ->
+        val resources = perception["resources"] as? List<Pair<Vec3, Float>> ?: return@gatherLbl null
         resources.firstOrNull()?.let { (resourcePos, _) ->
             Cmd.Move(perception["id"] as EntityId, resourcePos)
         }
@@ -132,10 +135,10 @@ object Behaviors {
         }
     
     infix fun Behavior.then(other: Behavior): Behavior =
-        { world, id -> 
+        { world: World, id: EntityId -> 
             this.first(world, id) + other.first(world, id)
-        } to { perception ->
-            this.second(perception) ?: other.second(perception)
+        } to { perception: Map<String, Any> ->
+            this@then.second(perception) ?: other.second(perception)
         }
     
     fun Behavior.withPriority(priority: Float): Behavior =
@@ -164,19 +167,21 @@ class NeuralAI(
     }
     
     fun decide(input: FloatArray): Int {
-        var current = input
-        
+        var current: FloatArray = input
+
         for (layer in weights) {
-            current = FloatArray(layer[0].size) { j ->
+            val next = FloatArray(layer[0].size) { j ->
                 var sum = 0f
                 for (i in current.indices) {
-                    sum += current[i] * layer.getOrNull(i)?.getOrNull(j) ?: 0f
+                    val w = layer.getOrNull(i)?.getOrNull(j) ?: 0f
+                    sum += current[i] * w
                 }
                 tanh(sum)
             }
+            current = next
         }
-        
-        return current.indices.maxByOrNull { current[it] } ?: 0
+
+        return (current.indices.maxByOrNull { current[it] } ?: 0)
     }
     
     fun perceive(world: World, id: EntityId): FloatArray {
@@ -185,14 +190,19 @@ class NeuralAI(
         val team = entity.get<Team>("team")?.id ?: 0
         
         // Neural input encoding
-        return floatArrayOf(
-            pos.first / 1000f,
-            pos.second / 1000f,
-            entity.get<HP>("hp")?.let { it.value.first / it.value.second } ?: 1f,
-            world.with<Team>("team").count { (_, t) -> t.id == team }.toFloat() / 20f,
-            world.with<Team>("team").count { (_, t) -> t.id != team }.toFloat() / 20f,
-            // Add more features...
-        ).take(layers.first()).toFloatArray()
+    val features = mutableListOf<Float>()
+    features += pos.first / 1000f
+    features += pos.second / 1000f
+    features += (entity.get<HP>("hp")?.let { it.value.first / it.value.second } ?: 1f)
+    features += world.with<Team>("team").count { entry: Pair<EntityId, Team> -> entry.second.id == team }.toFloat() / 20f
+    features += world.with<Team>("team").count { entry: Pair<EntityId, Team> -> entry.second.id != team }.toFloat() / 20f
+
+        // Pad or trim to layer size
+        val arr = FloatArray(layers.first())
+        for (i in 0 until layers.first()) {
+            arr[i] = if (i < features.size) features[i] else 0f
+        }
+        return arr
     }
 }
 
@@ -207,27 +217,31 @@ object Swarm {
         alignment: Float = 0.2f
     ): Flow<List<Cmd>> = flow {
         while (currentCoroutineContext().isActive) {
-            val commands = world.with<Team>("team")
-                .filter { (_, t) -> t.id == team.id }
-                .mapNotNull { (id, _) ->
-                    val entity = world[id] ?: return@mapNotNull null
-                    val pos = entity.get<Pos>("pos")?.vec ?: return@mapNotNull null
-                    val vel = entity.get<Vel>("vel")?.vec ?: Vec3(0f, 0f, 0f)
+        val commands = world.with<Team>("team")
+            .filter { entry: Pair<EntityId, Team> -> entry.second.id == team.id }
+            .mapNotNull { entry: Pair<EntityId, Team> ->
+                val id = entry.first
+                val entity = world[id] ?: return@mapNotNull null
+                val pos = entity.get<Pos>("pos")?.vec ?: return@mapNotNull null
+                val vel = entity.get<Vel>("vel")?.vec ?: Vec3(0f, 0f, 0f)
                     
                     // Find neighbors
                     val neighbors = world.with<Team>("team")
                         .filter { (otherId, t) -> t.id == team.id && otherId != id }
-                        .mapNotNull { (otherId, _) ->
+                        .mapNotNull { entry2: Pair<EntityId, Team> ->
+                            val otherId = entry2.first
                             world[otherId]?.get<Pos>("pos")?.vec?.let { otherPos ->
                                 val dist = pos.dist(otherPos)
                                 if (dist < 100f) Triple(otherId, otherPos, dist) else null
                             }
                         }
+                        .toList()
                     
                     if (neighbors.isEmpty()) return@mapNotNull null
                     
                     // Cohesion - move towards center of neighbors
-                    val center = neighbors.fold(Vec3(0f, 0f, 0f)) { acc, (_, nPos, _) ->
+                    val center = neighbors.fold(Vec3(0f, 0f, 0f)) { acc: Vec3, triple: Triple<EntityId, Vec3, Float> ->
+                        val nPos = triple.second
                         Vec3(acc.first + nPos.first, acc.second + nPos.second, acc.third + nPos.third)
                     }.let { 
                         Vec3(it.first / neighbors.size, it.second / neighbors.size, it.third / neighbors.size)
@@ -235,7 +249,9 @@ object Swarm {
                     val cohesionForce = (center - pos).normalize() * cohesion
                     
                     // Separation - avoid crowding
-                    val separationForce = neighbors.fold(Vec3(0f, 0f, 0f)) { acc, (_, nPos, dist) ->
+                    val separationForce = neighbors.fold(Vec3(0f, 0f, 0f)) { acc: Vec3, triple: Triple<EntityId, Vec3, Float> ->
+                        val nPos = triple.second
+                        val dist = triple.third
                         if (dist < 30f) {
                             val away = (pos - nPos).normalize() * (1f / (dist + 1f))
                             acc + away
@@ -243,9 +259,10 @@ object Swarm {
                     } * separation
                     
                     // Alignment - match neighbor velocities
-                    val avgVel = neighbors.mapNotNull { (otherId, _, _) ->
+                    val avgVel = neighbors.mapNotNull { triple: Triple<EntityId, Vec3, Float> ->
+                        val otherId = triple.first
                         world[otherId]?.get<Vel>("vel")?.vec
-                    }.fold(Vec3(0f, 0f, 0f)) { acc, v ->
+                    }.fold(Vec3(0f, 0f, 0f)) { acc: Vec3, v: Vec3 ->
                         Vec3(acc.first + v.first, acc.second + v.second, acc.third + v.third)
                     }.let { 
                         if (neighbors.isNotEmpty()) {

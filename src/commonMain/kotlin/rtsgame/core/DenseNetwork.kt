@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.flow.*
 import kotlin.time.*
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Dense networking layer using delta compression and predictive rollback
@@ -72,7 +73,7 @@ class DenseNetworkEngine(
                                 confirmedFrame.value = msg.frame
                                 
                                 // Rollback and replay if needed
-                                if (needsRollback(predictedWorld, syncWorld, msg.frame)) {
+                                if (needsRollback(predictedWorld, syncWorld)) {
                                     predictedWorld = rollback(syncWorld, msg.frame, currentFrame)
                                     emit(predictedWorld to true) // true = rollback occurred
                                     continue
@@ -92,7 +93,7 @@ class DenseNetworkEngine(
             
             // Main prediction loop
             while (currentCoroutineContext().isActive) {
-                val frameStart = System.currentTimeMillis()
+                val frameStart = TimeUtils.currentTimeMillis()
                 
                 // Send local input
                 if (cmdBuffer.isNotEmpty()) {
@@ -115,8 +116,8 @@ class DenseNetworkEngine(
                 currentFrame++
                 
                 // Frame timing
-                val elapsed = System.currentTimeMillis() - frameStart
-                delay((16 - elapsed).coerceAtLeast(0))
+                val elapsed = TimeUtils.currentTimeMillis() - frameStart
+                delay((16.milliseconds.inWholeMilliseconds - elapsed).coerceAtLeast(0L))
             }
         }
     }
@@ -132,7 +133,7 @@ class DenseNetworkEngine(
         val lastSync = mutableMapOf<PlayerId, Frame>()
         
         while (currentCoroutineContext().isActive) {
-            val frameStart = System.currentTimeMillis()
+            val frameStart = TimeUtils.currentTimeMillis()
             
             // Gather all inputs for this frame
             val frameCmds = gatherInputs(currentFrame)
@@ -162,8 +163,8 @@ class DenseNetworkEngine(
             currentFrame++
             
             // Frame timing
-            val elapsed = System.currentTimeMillis() - frameStart
-            delay((16 - elapsed).coerceAtLeast(0))
+            val elapsed = TimeUtils.currentTimeMillis() - frameStart
+                delay((16.milliseconds.inWholeMilliseconds - elapsed).coerceAtLeast(0L))
         }
     }
     
@@ -187,7 +188,7 @@ class DenseNetworkEngine(
         return w
     }
     
-    private fun needsRollback(predicted: World, authoritative: World, frame: Frame): Boolean =
+    private fun needsRollback(predicted: World, authoritative: World): Boolean =
         predicted.hash() != authoritative.hash()
     
     private suspend fun rollback(from: World, fromFrame: Frame, toFrame: Frame): World {
@@ -201,7 +202,7 @@ class DenseNetworkEngine(
         return world
     }
     
-    private fun computeDelta(old: World, new: World): Delta {
+    fun computeDelta(old: World, new: World): Delta {
         val delta = mutableMapOf<EntityId, Entity?>()
         
         // Changed/new entities
@@ -219,7 +220,7 @@ class DenseNetworkEngine(
         return delta
     }
     
-    private fun applyDelta(world: World, delta: Delta): World =
+    fun applyDelta(world: World, delta: Delta): World =
         delta.entries.fold(world) { w, (id, entity) ->
             if (entity == null) w - id
             else w + (id to entity)
@@ -250,99 +251,156 @@ fun World.hash(): Int {
 
 // Binary network protocol
 object NetCodec {
-    fun Net.encode(): ByteArray = when (this) {
-        is Net.Input -> {
-            byteArrayOf(0) + player.toVarInt() + frame.toVarInt() + 
-            cmds.size.toVarInt() + cmds.flatMap { it.encode().toList() }.toByteArray()
-        }
-        is Net.Sync -> {
-            byteArrayOf(1) + frame.toVarInt() + delta.encode() + hash.toBytes()
-        }
-        is Net.Full -> {
-            byteArrayOf(2) + frame.toVarInt() + world.encode()
-        }
-        is Net.Ack -> {
-            byteArrayOf(3) + player.toVarInt() + frame.toVarInt()
+    // Small byte builder to avoid repeated ByteArray + operations and List->ByteArray issues
+    private class ByteBuilder {
+        private val buf = ArrayList<Byte>()
+        fun add(b: Byte) { buf.add(b) }
+        fun addAll(arr: ByteArray) { for (bb in arr) buf.add(bb) }
+        fun addAll(list: List<Byte>) { buf.addAll(list) }
+        fun toByteArray(): ByteArray {
+            val out = ByteArray(buf.size)
+            for (i in buf.indices) out[i] = buf[i]
+            return out
         }
     }
-    
-    private fun Delta.encode(): ByteArray {
-        val bytes = mutableListOf<Byte>()
-        bytes.addAll(size.toVarInt().toList())
-        
-        forEach { (id, entity) ->
-            bytes.addAll(id.toVarInt().toList())
-            if (entity == null) {
-                bytes.add(0)
-            } else {
-                bytes.add(1)
-                bytes.addAll(entity.encode().toList())
+
+    fun Net.encode(): ByteArray {
+        val b = ByteBuilder()
+        when (this) {
+            is Net.Input -> {
+                b.add(0.toByte())
+                b.addAll(player.toVarInt())
+                b.addAll(frame.toVarInt())
+                b.addAll(cmds.size.toVarInt())
+                // each cmd as bytes
+                cmds.forEach { b.addAll(it.encode()) }
+            }
+            is Net.Sync -> {
+                b.add(1.toByte())
+                b.addAll(frame.toVarInt())
+                b.addAll(delta.encode())
+                b.addAll(hash.toBytes())
+            }
+            is Net.Full -> {
+                b.add(2.toByte())
+                b.addAll(frame.toVarInt())
+                b.addAll(world.encode())
+            }
+            is Net.Ack -> {
+                b.add(3.toByte())
+                b.addAll(player.toVarInt())
+                b.addAll(frame.toVarInt())
             }
         }
-        
-        return bytes.toByteArray()
+        return b.toByteArray()
     }
-    
-    private fun World.encode(): ByteArray {
-        val bytes = mutableListOf<Byte>()
-        bytes.addAll(size.toVarInt().toList())
-        
+
+    @JvmName("encodeDelta")
+    private fun Delta.encode(): ByteArray {
+        val b = ByteBuilder()
         forEach { (id, entity) ->
-            bytes.addAll(id.toVarInt().toList())
-            bytes.addAll(entity.encode().toList())
+            b.addAll(id.toVarInt())
+            if (entity == null) {
+                b.add(0.toByte())
+            } else {
+                b.add(1.toByte())
+                b.addAll(entity.encode())
+            }
         }
-        
-        return bytes.toByteArray()
+        return b.toByteArray()
     }
-    
+
+    @JvmName("encodeWorld")
+    private fun World.encode(): ByteArray {
+        val b = ByteBuilder()
+        forEach { (id, entity) ->
+            b.addAll(id.toVarInt())
+            b.addAll(entity.encode())
+        }
+        return b.toByteArray()
+    }
+
+    @JvmName("encodeEntity")
     private fun Entity.encode(): ByteArray {
-        val bytes = mutableListOf<Byte>()
-        bytes.addAll(size.toVarInt().toList())
-        
+        val b = ByteBuilder()
+        b.addAll(size.toVarInt())
         forEach { (key, value) ->
-            bytes.addAll(key.encodeToByteArray().size.toVarInt().toList())
-            bytes.addAll(key.encodeToByteArray().toList())
-            
+            val keyBytes = key.encodeToByteArray()
+            b.addAll(keyBytes.size.toVarInt())
+            b.addAll(keyBytes)
+
             when (value) {
                 is Pos -> {
-                    bytes.add(0)
-                    bytes.addAll(value.vec.toBytes().toList())
+                    b.add(0.toByte())
+                    b.addAll(value.vec.toBytes())
                 }
                 is HP -> {
-                    bytes.add(1)
-                    bytes.addAll(value.value.first.toBits().toBytes().toList())
-                    bytes.addAll(value.value.second.toBits().toBytes().toList())
+                    b.add(1.toByte())
+                    b.addAll(value.value.first.toBits().toBytes())
+                    b.addAll(value.value.second.toBits().toBytes())
                 }
                 is Team -> {
-                    bytes.add(2)
-                    bytes.addAll(value.id.toVarInt().toList())
+                    b.add(2.toByte())
+                    b.addAll(value.id.toVarInt())
                 }
                 is Dmg -> {
-                    bytes.add(3)
-                    bytes.addAll(value.value.toBits().toBytes().toList())
+                    b.add(3.toByte())
+                    b.addAll(value.value.toBits().toBytes())
                 }
                 else -> {
-                    bytes.add(255)
+                    b.add(255.toByte())
                     val str = value.toString()
-                    bytes.addAll(str.encodeToByteArray().size.toVarInt().toList())
-                    bytes.addAll(str.encodeToByteArray().toList())
+                    val strBytes = str.encodeToByteArray()
+                    b.addAll(strBytes.size.toVarInt())
+                    b.addAll(strBytes)
                 }
             }
         }
-        
+        return b.toByteArray()
+    }
+
+    private fun Int.toVarInt(): ByteArray = this.toVarIntImpl()
+    private fun Long.toVarInt(): ByteArray = this.toVarIntImpl()
+
+    // Internal generic varint builder for Int/Long
+    private fun Long.toVarIntImpl(): ByteArray {
+        val bytes = ArrayList<Byte>()
+        var v = this
+        while (v > 0x7F) {
+            bytes.add(((v and 0x7F) or 0x80).toByte())
+            v = v ushr 7
+        }
+        bytes.add((v and 0x7F).toByte())
         return bytes.toByteArray()
     }
-    
-    private fun Int.toVarInt() = DenseCodec.run { toVarInt() }
-    private fun Vec3.toBytes() = DenseCodec.run { toBytes() }
-    private fun Int.toBytes() = DenseCodec.run { toBytes() }
+
+    private fun Int.toVarIntImpl(): ByteArray = this.toLong().toVarIntImpl()
+
+    private fun Vec3.toBytes(): ByteArray =
+        first.toBits().toBytes() + second.toBits().toBytes() + third.toBits().toBytes()
+
+    private fun Int.toBytes(): ByteArray = byteArrayOf(
+        (this shr 24).toByte(),
+        (this shr 16).toByte(),
+        (this shr 8).toByte(),
+        this.toByte()
+    )
+
+    private fun Float.toBits(): Int = java.lang.Float.floatToIntBits(this)
+
+    private fun Cmd.encode(): ByteArray = when (this) {
+    is Cmd.Move -> ByteBuilder().apply { add(0.toByte()); addAll(id.toVarInt()); addAll(pos.toBytes()) }.toByteArray()
+    is Cmd.Attack -> ByteBuilder().apply { add(1.toByte()); addAll(from.toVarInt()); addAll(to.toVarInt()) }.toByteArray()
+    is Cmd.Build -> ByteBuilder().apply { add(2.toByte()); addAll(type.encodeToByteArray()); addAll(pos.toBytes()) }.toByteArray()
+    is Cmd.Spawn -> ByteBuilder().apply { add(3.toByte()); addAll(type.encodeToByteArray()); addAll(team.toVarInt()); addAll(pos.toBytes()) }.toByteArray()
+    }
 }
 
 // Usage example
 suspend fun networkExample() {
     val network = Channel<Net>(Channel.UNLIMITED)
     val engine = DenseNetworkEngine(playerId = 1)
-    
+
     val world = mapOf(
         0 to entityOf(
             "pos" to Pos(Vec3(0f, 0f, 0f)),
@@ -350,23 +408,26 @@ suspend fun networkExample() {
             "hp" to HP(100f to 100f)
         )
     )
-    
+
     val commands = flow {
         emit(Cmd.Move(0, Vec3(100f, 0f, 0f)))
     }
-    
-    // Client
-    launch {
-        engine.clientPredict(world, commands, network).collect { (w, rollback) ->
-            if (rollback) println("Rollback!")
-            println("Client world: ${w.size} entities")
+
+    // Run client and server coroutines within a coroutineScope so launch is available
+    coroutineScope {
+        // Client
+        launch {
+            engine.clientPredict(world, commands, network).collect { (w, rollback) ->
+                if (rollback) println("Rollback!")
+                println("Client world: ${w.size} entities")
+            }
         }
-    }
-    
-    // Server
-    launch {
-        engine.serverSimulate(world, setOf(1), network).collect { w ->
-            println("Server world: ${w.size} entities")
+
+        // Server
+        launch {
+            engine.serverSimulate(world, setOf(1), network).collect { w ->
+                println("Server world: ${w.size} entities")
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ package rtsgame
 import kotlin.test.*
 import rtsgame.codec.*
 import rtsgame.core.*
+import rtsgame.simulation.*
 
 class CommandProcessingTDDTest {
     lateinit var simulation: Simulation

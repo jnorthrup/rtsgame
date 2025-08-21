@@ -361,32 +361,66 @@ export function isBuildable(terrain, x, y) {
 
 // Standalone findLandPosition function for AI use
 export function findLandPosition(gameContext, x, y, radius) {
-    if (!gameContext.terrain?.terrain) {
-        return null;
+    // Support multiple shapes for gameContext:
+    // - { terrain: { terrain: [...], terrainManager }, seedRandom }
+    // - { terrain: [...], resourceNodes: [...] , seedRandom }
+    // - plain object passed as { terrain, resourceNodes } (used in tests)
+
+    let terrainArray = null;
+    let terrainManager = null;
+    let rng = null;
+
+    if (gameContext == null) return null;
+
+    if (gameContext.terrain?.terrain) {
+        terrainArray = gameContext.terrain.terrain;
+        terrainManager = gameContext.terrain.terrainManager;
+        rng = gameContext.seedRandom || gameContext.gameContext?.seedRandom || null;
+    } else if (Array.isArray(gameContext.terrain)) {
+        terrainArray = gameContext.terrain;
+        // Provide a minimal terrainManager that treats the terrain cell object as properties
+        terrainManager = { getTerrainProperties: t => t };
+        rng = gameContext.seedRandom || null;
+    } else if (Array.isArray(gameContext)) {
+        // If someone passed the terrain array directly
+        terrainArray = gameContext;
+        terrainManager = { getTerrainProperties: t => t };
+    } else if (gameContext.terrain && !gameContext.terrain.terrain && gameContext.terrain.length) {
+        // Another defensive branch: gameContext is an object with a terrain array-like field
+        terrainArray = gameContext.terrain;
+        terrainManager = { getTerrainProperties: t => t };
+        rng = gameContext.seedRandom || null;
     }
-    
+
+    // Fallback to global Math.random if no RNG provided (non-deterministic)
+    if (!rng) {
+        rng = { random: () => Math.random() };
+    }
+
+    if (!terrainArray) return null;
+
     let attempts = 0;
     const maxAttempts = 100;
-    
+
     while (attempts < maxAttempts) {
-        const testX = Math.floor(gameContext.seedRandom.random() * GRID_SIZE);
-        const testY = Math.floor(gameContext.seedRandom.random() * GRID_SIZE);
-        
+        const testX = Math.floor(rng.random() * GRID_SIZE);
+        const testY = Math.floor(rng.random() * GRID_SIZE);
+
         // Check if area around this position is clear
         let clear = true;
         for (let dy = -radius; dy <= radius; dy++) {
             for (let dx = -radius; dx <= radius; dx++) {
                 const checkX = testX + dx;
                 const checkY = testY + dy;
-                
+
                 if (checkX < 0 || checkX >= GRID_SIZE || checkY < 0 || checkY >= GRID_SIZE) {
                     clear = false;
                     break;
                 }
-                
-                const terrainType = gameContext.terrain.terrain[checkY][checkX];
-                const properties = gameContext.terrain.terrainManager.getTerrainProperties(terrainType);
-                
+
+                const terrainType = terrainArray[checkY][checkX];
+                const properties = terrainManager.getTerrainProperties(terrainType);
+
                 if (!properties.buildable) {
                     clear = false;
                     break;
@@ -394,17 +428,17 @@ export function findLandPosition(gameContext, x, y, radius) {
             }
             if (!clear) break;
         }
-        
+
         if (clear) {
             return {
                 x: testX * TILE_SIZE,
                 y: testY * TILE_SIZE
             };
         }
-        
+
         attempts++;
     }
-    
+
     return null;
 }
 

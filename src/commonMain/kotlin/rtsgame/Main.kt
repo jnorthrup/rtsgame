@@ -6,9 +6,4 @@ package rtsgame
  */
 expect fun platformMain()
 
-/**
- * Main function for JVM target
- */
-fun main() {
-    platformMain()
-}
+// Platform-specific entry points implement `platformMain()`.
