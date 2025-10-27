@@ -18,7 +18,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `engine creates initial game state`() {
+    fun engine_creates_initial_game_state() {
         val state = engine.tick()
         
         assertEquals(2, state.entities.`play`.size, "Should have 2 initial entities")
@@ -31,7 +31,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `simulation advances tick correctly`() {
+    fun simulation_advances_tick_correctly() {
         val initialState = engine.tick()
         val nextState = engine.simulateTick(initialState)
         
@@ -40,7 +40,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `entities move during simulation`() {
+    fun entities_move_during_simulation() {
         val initialState = engine.tick()
         val nextState = engine.simulateTick(initialState)
         
@@ -56,7 +56,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `entity positions stay within bounds`() {
+    fun entity_positions_stay_within_bounds() {
         var state = engine.tick()
         
         // Run multiple simulation steps
@@ -74,7 +74,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `entity health remains valid`() {
+    fun entity_health_remains_valid() {
         val state = engine.tick()
         
         state.entities.`play`.forEach { entity ->
@@ -84,7 +84,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `player ids are valid`() {
+    fun player_ids_are_valid() {
         val state = engine.tick()
         
         state.entities.`play`.forEach { entity ->
@@ -93,7 +93,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `series operations work correctly`() {
+    fun series_operations_work_correctly() {
         val state = engine.tick()
         
         // Test Indexed.play property
@@ -106,7 +106,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `join operations work correctly`() {
+    fun join_operations_work_correctly() {
         val state = engine.tick()
         val entity = state.entities.`play`.first()
         
@@ -119,7 +119,7 @@ class GameEngineTest {
     }
     
     @Test
-    fun `platform compatibility works`() {
+    fun platform_compatibility_works() {
         val timestamp = currentTimeMillis()
         assertTrue(timestamp > 0, "Current time should be positive")
         
@@ -134,7 +134,7 @@ class GameEngineTest {
 class GameEnginePerformanceTest {
     
     @Test
-    fun `large simulation runs efficiently`() {
+    fun large_simulation_runs_efficiently() {
         val engine = GameEngine()
         var state = engine.tick()
         
@@ -153,7 +153,7 @@ class GameEnginePerformanceTest {
     }
     
     @Test
-    fun `memory usage stays stable`() {
+    fun memory_usage_stays_stable() {
         val engine = GameEngine()
         var state = engine.tick()
         

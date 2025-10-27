@@ -3,6 +3,7 @@ package rtsgame.core
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlin.math.*
+import trikeshed.lib.Join
 
 /**
  * Dense model system for efficient 3D asset management and rendering
@@ -51,7 +52,7 @@ data class ModelAsset(
 data class Vertex(
     val position: Vec3,
     val normal: Vec3,
-    val uv: Pair<Float, Float>
+    val uv: Join<Float, Float>
 )
 
 data class Mesh(
@@ -171,7 +172,7 @@ object ModelLoader {
         )
         
         positions.forEach { pos ->
-            vertices.add(Vertex(pos, Vec3(0f, 1f, 0f), 0f to 0f))
+            vertices.add(Vertex(pos, Vec3(0f, 1f, 0f), Join(0f, 0f)))
         }
         
         // Box indices
@@ -212,7 +213,7 @@ object ModelLoader {
         )
         
         positions.forEach { pos ->
-            vertices.add(Vertex(pos, Vec3(0f, 1f, 0f), 0f to 0f))
+            vertices.add(Vertex(pos, Vec3(0f, 1f, 0f), Join(0f, 0f)))
         }
         
         val boxIndices = listOf(
@@ -235,14 +236,14 @@ object ModelLoader {
         val height = 0.8f
         
         val vertices = listOf(
-            Vertex(Vec3(-size, 0f, -size), Vec3(0f, 1f, 0f), 0f to 0f),
-            Vertex(Vec3(size, 0f, -size), Vec3(0f, 1f, 0f), 1f to 0f),
-            Vertex(Vec3(size, height, -size), Vec3(0f, 1f, 0f), 1f to 1f),
-            Vertex(Vec3(-size, height, -size), Vec3(0f, 1f, 0f), 0f to 1f),
-            Vertex(Vec3(-size, 0f, size), Vec3(0f, 1f, 0f), 0f to 0f),
-            Vertex(Vec3(size, 0f, size), Vec3(0f, 1f, 0f), 1f to 0f),
-            Vertex(Vec3(size, height, size), Vec3(0f, 1f, 0f), 1f to 1f),
-            Vertex(Vec3(-size, height, size), Vec3(0f, 1f, 0f), 0f to 1f)
+            Vertex(Vec3(-size, 0f, -size), Vec3(0f, 1f, 0f), Join(0f, 0f)),
+            Vertex(Vec3(size, 0f, -size), Vec3(0f, 1f, 0f), Join(1f, 0f)),
+            Vertex(Vec3(size, height, -size), Vec3(0f, 1f, 0f), Join(1f, 1f)),
+            Vertex(Vec3(-size, height, -size), Vec3(0f, 1f, 0f), Join(0f, 1f)),
+            Vertex(Vec3(-size, 0f, size), Vec3(0f, 1f, 0f), Join(0f, 0f)),
+            Vertex(Vec3(size, 0f, size), Vec3(0f, 1f, 0f), Join(1f, 0f)),
+            Vertex(Vec3(size, height, size), Vec3(0f, 1f, 0f), Join(1f, 1f)),
+            Vertex(Vec3(-size, height, size), Vec3(0f, 1f, 0f), Join(0f, 1f))
         )
         
         val indices = listOf(
@@ -272,8 +273,8 @@ object ModelLoader {
             val x = cos(angle) * radius
             val z = sin(angle) * radius
             
-            vertices.add(Vertex(Vec3(x, 0f, z), Vec3(x, 0f, z).normalize(), i.toFloat() / segments to 0f))
-            vertices.add(Vertex(Vec3(x, height, z), Vec3(x, 0f, z).normalize(), i.toFloat() / segments to 1f))
+            vertices.add(Vertex(Vec3(x, 0f, z), Vec3(x, 0f, z).normalize(), Join(i.toFloat() / segments, 0f)))
+            vertices.add(Vertex(Vec3(x, height, z), Vec3(x, 0f, z).normalize(), Join(i.toFloat() / segments, 1f)))
         }
         
         // Generate cylinder indices
@@ -291,10 +292,10 @@ object ModelLoader {
     private fun generateDefaultMesh(): Mesh {
         // Simple cube
         val vertices = listOf(
-            Vertex(Vec3(-0.5f, -0.5f, -0.5f), Vec3(0f, 0f, -1f), 0f to 0f),
-            Vertex(Vec3(0.5f, -0.5f, -0.5f), Vec3(0f, 0f, -1f), 1f to 0f),
-            Vertex(Vec3(0.5f, 0.5f, -0.5f), Vec3(0f, 0f, -1f), 1f to 1f),
-            Vertex(Vec3(-0.5f, 0.5f, -0.5f), Vec3(0f, 0f, -1f), 0f to 1f)
+            Vertex(Vec3(-0.5f, -0.5f, -0.5f), Vec3(0f, 0f, -1f), Join(0f, 0f)),
+            Vertex(Vec3(0.5f, -0.5f, -0.5f), Vec3(0f, 0f, -1f), Join(1f, 0f)),
+            Vertex(Vec3(0.5f, 0.5f, -0.5f), Vec3(0f, 0f, -1f), Join(1f, 1f)),
+            Vertex(Vec3(-0.5f, 0.5f, -0.5f), Vec3(0f, 0f, -1f), Join(0f, 1f))
         )
         
         val indices = listOf(0, 1, 2, 0, 2, 3)
@@ -441,10 +442,10 @@ object LODSystem {
     private fun generateBillboard(mesh: Mesh): Mesh {
         // Single quad facing camera
         val vertices = listOf(
-            Vertex(Vec3(-0.5f, 0f, 0f), Vec3(0f, 0f, 1f), 0f to 0f),
-            Vertex(Vec3(0.5f, 0f, 0f), Vec3(0f, 0f, 1f), 1f to 0f),
-            Vertex(Vec3(0.5f, 1f, 0f), Vec3(0f, 0f, 1f), 1f to 1f),
-            Vertex(Vec3(-0.5f, 1f, 0f), Vec3(0f, 0f, 1f), 0f to 1f)
+            Vertex(Vec3(-0.5f, 0f, 0f), Vec3(0f, 0f, 1f), Join(0f, 0f)),
+            Vertex(Vec3(0.5f, 0f, 0f), Vec3(0f, 0f, 1f), Join(1f, 0f)),
+            Vertex(Vec3(0.5f, 1f, 0f), Vec3(0f, 0f, 1f), Join(1f, 1f)),
+            Vertex(Vec3(-0.5f, 1f, 0f), Vec3(0f, 0f, 1f), Join(0f, 1f))
         )
         val indices = listOf(0, 1, 2, 0, 2, 3)
         return Mesh(vertices, indices, mesh.material)

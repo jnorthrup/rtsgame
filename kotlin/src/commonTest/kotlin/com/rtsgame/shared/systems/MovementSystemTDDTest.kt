@@ -15,8 +15,8 @@ class MovementSystemTDDTest {
         // Expect: after one second at speed 1, entity at (1,0)
         val expected = Position(1f, 0f)
 
-        // Act: placeholder — replace with MovementSystem.step(...) call in implementation
-        val actual = Position(0f, 0f) // TODO: implement movement logic and update this test
+    // Act: use MovementSystem helper to compute a single-step movement
+    val actual = com.rtsgame.shared.systems.MovementSystem.stepPosition(start, target, 1f, 1f)
 
         // Assert: seed assertion (will fail until movement system implemented)
         assertEquals(expected.x, actual.x, "x position after step should match expected")

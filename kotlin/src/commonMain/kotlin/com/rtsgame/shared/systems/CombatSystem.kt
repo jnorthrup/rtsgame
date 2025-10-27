@@ -1,7 +1,8 @@
 package com.rtsgame.shared.systems
 
 import com.rtsgame.shared.entity.Building
-import com.rtsgame.shared.entity.Unit
+import com.rtsgame.shared.entity.Entity
+import com.rtsgame.shared.entity.GameUnit
 import com.rtsgame.shared.game.GameState
 import com.rtsgame.shared.map.GameMap
 import com.rtsgame.shared.map.Position
@@ -9,41 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlin.math.max
 import kotlin.math.min
 
-data class AttackProperties(
-    val damage: Float,
-    val range: Float,
-    val attackSpeed: Float,
-    val splashRadius: Float = 0f,
-    val damageType: DamageType,
-    val armorPenetration: Float = 0f,
-    val criticalChance: Float = 0f,
-    val criticalMultiplier: Float = 1.5f
-)
-
-data class DefenseProperties(
-    val armor: Float,
-    val armorType: ArmorType,
-    val damageReduction: Float = 0f,
-    val shield: Float = 0f,
-    val shieldRegen: Float = 0f,
-    val shieldRegenDelay: Float = 5f
-)
-
-enum class DamageType {
-    NORMAL,
-    PIERCING,
-    EXPLOSIVE,
-    ENERGY,
-    PLASMA
-}
-
-enum class ArmorType {
-    LIGHT,
-    MEDIUM,
-    HEAVY,
-    FORTIFIED,
-    SHIELDED
-}
+// Reuse shared combat types defined in CombatProperties.kt
 
 class CombatSystem(internal val gameMap: GameMap) {
     internal val damageTypeEffectiveness = mapOf(
@@ -52,35 +19,35 @@ class CombatSystem(internal val gameMap: GameMap) {
             ArmorType.MEDIUM to 0.75f,
             ArmorType.HEAVY to 0.5f,
             ArmorType.FORTIFIED to 0.25f,
-            ArmorType.SHIELDED to 0.5f
+            ArmorType.ENERGY to 0.5f
         ),
         DamageType.PIERCING to mapOf(
             ArmorType.LIGHT to 1.5f,
             ArmorType.MEDIUM to 1.0f,
             ArmorType.HEAVY to 0.75f,
             ArmorType.FORTIFIED to 0.5f,
-            ArmorType.SHIELDED to 0.25f
+            ArmorType.ENERGY to 0.25f
         ),
         DamageType.EXPLOSIVE to mapOf(
             ArmorType.LIGHT to 1.5f,
             ArmorType.MEDIUM to 1.25f,
             ArmorType.HEAVY to 1.0f,
             ArmorType.FORTIFIED to 0.75f,
-            ArmorType.SHIELDED to 1.5f
+            ArmorType.ENERGY to 1.5f
         ),
         DamageType.ENERGY to mapOf(
             ArmorType.LIGHT to 1.0f,
             ArmorType.MEDIUM to 1.0f,
             ArmorType.HEAVY to 1.0f,
             ArmorType.FORTIFIED to 0.5f,
-            ArmorType.SHIELDED to 2.0f
+            ArmorType.ENERGY to 2.0f
         ),
         DamageType.PLASMA to mapOf(
             ArmorType.LIGHT to 1.25f,
             ArmorType.MEDIUM to 1.25f,
             ArmorType.HEAVY to 1.25f,
             ArmorType.FORTIFIED to 1.0f,
-            ArmorType.SHIELDED to 1.5f
+            ArmorType.ENERGY to 1.5f
         )
     )
 
@@ -89,7 +56,7 @@ class CombatSystem(internal val gameMap: GameMap) {
 
         // Update combat for all units
         state.entities.values
-            .filterIsInstance<Unit>()
+            .filterIsInstance<GameUnit>()
             .forEach { unit ->
                 if (unit.isAttacking) {
                     val target = state.entities[unit.attackTargetId]
@@ -107,18 +74,27 @@ class CombatSystem(internal val gameMap: GameMap) {
 
         // Update shields and regeneration
         updatedState.entities.values
-            .filter { it is Unit || it is Building }
             .forEach { entity ->
-                if (entity.defenseProperties.shield < entity.defenseProperties.shieldRegen) {
-                    val updatedEntity = regenerateShield(entity)
-                    updatedState = updatedState.updateEntity(updatedEntity)
+                when (entity) {
+                    is GameUnit -> {
+                        if (entity.defenseProperties.shield < entity.defenseProperties.shieldRegen) {
+                            val updatedEntity = regenerateShield(entity)
+                            updatedState = updatedState.updateEntity(updatedEntity)
+                        }
+                    }
+                    is Building -> {
+                        if (entity.defenseProperties.shield < entity.defenseProperties.shieldRegen) {
+                            val updatedEntity = regenerateShield(entity)
+                            updatedState = updatedState.updateEntity(updatedEntity)
+                        }
+                    }
                 }
             }
 
         return updatedState
     }
 
-    internal fun isInRange(attacker: Unit, target: Entity): Boolean {
+    internal fun isInRange(attacker: GameUnit, target: Entity): Boolean {
         val distance = calculateDistance(attacker.position, target.position)
         return distance <= attacker.attackProperties.range
     }
@@ -129,11 +105,34 @@ class CombatSystem(internal val gameMap: GameMap) {
         return kotlin.math.sqrt(dx * dx + dy * dy)
     }
 
-    internal fun calculateDamage(attacker: Unit, target: Entity): Float {
+    internal fun calculateDamage(attacker: GameUnit, target: Entity): Float {
         val baseDamage = attacker.attackProperties.damage
-        val effectiveness = damageTypeEffectiveness[attacker.attackProperties.damageType]?.get(target.defenseProperties.armorType) ?: 1.0f
-        val armorReduction = max(0f, target.defenseProperties.armor - attacker.attackProperties.armorPenetration)
-        val damageReduction = target.defenseProperties.damageReduction
+        var targetDefense = attacker.defenseProperties // fallback, will be overwritten
+        var armorType = com.rtsgame.shared.systems.ArmorType.LIGHT
+        var armor = 0f
+        var damageReduction = 0f
+
+        when (target) {
+            is GameUnit -> {
+                armorType = target.defenseProperties.armorType
+                armor = target.defenseProperties.armor
+                damageReduction = target.defenseProperties.damageReduction
+            }
+            is Building -> {
+                armorType = target.defenseProperties.armorType
+                armor = target.defenseProperties.armor
+                damageReduction = target.defenseProperties.damageReduction
+            }
+            else -> {
+                // Unknown entity: default values
+                armorType = com.rtsgame.shared.systems.ArmorType.LIGHT
+                armor = 0f
+                damageReduction = 0f
+            }
+        }
+
+        val effectiveness = damageTypeEffectiveness[attacker.attackProperties.damageType]?.get(armorType) ?: 1.0f
+        val armorReduction = max(0f, armor - attacker.attackProperties.penetration)
 
         var damage = baseDamage * effectiveness * (1f - armorReduction / (armorReduction + 100f)) * (1f - damageReduction)
 
@@ -146,41 +145,48 @@ class CombatSystem(internal val gameMap: GameMap) {
     }
 
     internal fun applyDamage(target: Entity, damage: Float): Entity {
-        // Apply damage to shield first
-        val remainingShield = max(0f, target.defenseProperties.shield - damage)
-        val remainingDamage = max(0f, damage - target.defenseProperties.shield)
-
         return when (target) {
-            is Unit -> target.copy(
-                health = max(0f, target.health - remainingDamage),
-                defenseProperties = target.defenseProperties.copy(shield = remainingShield)
-            )
-            is Building -> target.copy(
-                health = max(0f, target.health - remainingDamage),
-                defenseProperties = target.defenseProperties.copy(shield = remainingShield)
-            )
+            is GameUnit -> {
+                val remainingShield = max(0f, target.defenseProperties.shield - damage)
+                val remainingDamage = max(0f, damage - target.defenseProperties.shield)
+                target.copy(
+                    health = max(0f, target.health - remainingDamage),
+                    defenseProperties = target.defenseProperties.copy(shield = remainingShield)
+                )
+            }
+            is Building -> {
+                val remainingShield = max(0f, target.defenseProperties.shield - damage)
+                val remainingDamage = max(0f, damage - target.defenseProperties.shield)
+                target.copy(
+                    health = max(0f, target.health - remainingDamage),
+                    defenseProperties = target.defenseProperties.copy(shield = remainingShield)
+                )
+            }
             else -> target
         }
     }
 
     internal fun regenerateShield(entity: Entity): Entity {
-        val newShield = min(
-            entity.defenseProperties.shieldRegen,
-            entity.defenseProperties.shield + entity.defenseProperties.shieldRegen
-        )
-
         return when (entity) {
-            is Unit -> entity.copy(
-                defenseProperties = entity.defenseProperties.copy(shield = newShield)
-            )
-            is Building -> entity.copy(
-                defenseProperties = entity.defenseProperties.copy(shield = newShield)
-            )
+            is GameUnit -> {
+                val newShield = min(
+                    entity.defenseProperties.shieldRegen,
+                    entity.defenseProperties.shield + entity.defenseProperties.shieldRegen
+                )
+                entity.copy(defenseProperties = entity.defenseProperties.copy(shield = newShield))
+            }
+            is Building -> {
+                val newShield = min(
+                    entity.defenseProperties.shieldRegen,
+                    entity.defenseProperties.shield + entity.defenseProperties.shieldRegen
+                )
+                entity.copy(defenseProperties = entity.defenseProperties.copy(shield = newShield))
+            }
             else -> entity
         }
     }
 
-    fun findTargetsInRange(attacker: Unit, state: GameState): List<Entity> {
+    fun findTargetsInRange(attacker: GameUnit, state: GameState): List<Entity> {
         return state.entities.values
             .filter { it.team != attacker.team }
             .filter { isInRange(attacker, it) }

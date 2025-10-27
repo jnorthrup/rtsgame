@@ -1,7 +1,7 @@
 package com.rtsgame.shared.systems
 
 import com.rtsgame.shared.entity.Position
-import com.rtsgame.shared.entity.Unit
+import com.rtsgame.shared.entity.GameUnit
 import com.rtsgame.shared.game.GameState
 import com.rtsgame.shared.map.GameMap
 import com.rtsgame.shared.pathfinding.Pathfinder
@@ -13,11 +13,22 @@ import kotlin.math.sqrt
 class MovementSystem(internal val gameMap: GameMap) {
     internal val pathfinder = Pathfinder(gameMap)
 
+    companion object {
+        // Compute next position moving from current towards target at given speed and dt
+        fun stepPosition(current: com.rtsgame.shared.map.Position, target: com.rtsgame.shared.map.Position, speed: Float, dt: Float): com.rtsgame.shared.map.Position {
+            val dir = current.directionTo(target)
+            val moveDist = speed * dt
+            val dx = dir.x * moveDist
+            val dy = dir.y * moveDist
+            return com.rtsgame.shared.map.Position(current.x + dx, current.y + dy)
+        }
+    }
+
     fun update(gameState: GameState, deltaTime: Float): GameState {
         var newState = gameState
 
         gameState.entities.values.forEach { entity ->
-            if (entity is Unit && entity.isMoving) {
+            if (entity is GameUnit && entity.path.isNotEmpty()) {
                 val updatedUnit = updateUnitMovement(entity, deltaTime)
                 newState = newState.updateEntity(updatedUnit)
             }
@@ -26,12 +37,12 @@ class MovementSystem(internal val gameMap: GameMap) {
         return newState
     }
 
-    internal fun updateUnitMovement(unit: Unit, deltaTime: Float): Unit {
-        if (!unit.isMoving || unit.currentPathIndex >= unit.movementPath.size) {
+    internal fun updateUnitMovement(unit: GameUnit, deltaTime: Float): GameUnit {
+        if (unit.path.isEmpty() || unit.currentPathIndex >= unit.path.size) {
             return unit
         }
 
-        val targetPosition = unit.movementPath[unit.currentPathIndex]
+        val targetPosition = unit.path[unit.currentPathIndex]
         val currentPosition = unit.position
 
         // Calculate direction and distance
@@ -55,21 +66,23 @@ class MovementSystem(internal val gameMap: GameMap) {
         if (gameMap.isWalkable(newPosition)) {
             return unit.updatePosition(newPosition)
         } else {
-            // If the path is blocked, recalculate path
-            val newPath = pathfinder.findPath(currentPosition, unit.targetPosition ?: currentPosition)
+            // If the path is blocked, recalculate path using the unit's destination (last waypoint)
+            val destination = unit.path.lastOrNull() ?: currentPosition
+            val newPath = pathfinder.findPath(currentPosition, destination)
             return if (newPath != null) {
-                unit.setMovementPath(newPath)
+                unit.setPath(newPath)
             } else {
-                unit.copy(isMoving = false, movementPath = emptyList(), currentPathIndex = 0, targetPosition = null)
+                // no path -> stop moving
+                unit.copy(path = emptyList(), currentPathIndex = 0)
             }
         }
     }
 
     fun moveUnit(gameState: GameState, unitId: String, targetPosition: Position): GameState {
-        val unit = gameState.entities[unitId] as? Unit ?: return gameState
+        val unit = gameState.entities[unitId] as? GameUnit ?: return gameState
         val path = pathfinder.findPath(unit.position, targetPosition) ?: return gameState
-        
-        val updatedUnit = unit.setMovementPath(path)
+
+        val updatedUnit = unit.setPath(path)
         return gameState.updateEntity(updatedUnit)
     }
 } 

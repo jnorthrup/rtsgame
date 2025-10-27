@@ -1,5 +1,2 @@
-package rtsgame
-
-actual fun platformMain() {
-    println("RTS Game JS Platform")
-}
+// PlatformJsMain.kt intentionally left blank to avoid duplicate `actual` implementations.
+// The real JS entry point is provided by MainJs.kt

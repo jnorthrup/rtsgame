@@ -251,7 +251,6 @@ fun World.hash(): Int {
 
 // Binary network protocol
 object NetCodec {
-    // Small byte builder to avoid repeated ByteArray + operations and List->ByteArray issues
     private class ByteBuilder {
         private val buf = ArrayList<Byte>()
         fun add(b: Byte) { buf.add(b) }
@@ -272,19 +271,18 @@ object NetCodec {
                 b.addAll(player.toVarInt())
                 b.addAll(frame.toVarInt())
                 b.addAll(cmds.size.toVarInt())
-                // each cmd as bytes
                 cmds.forEach { b.addAll(it.encode()) }
             }
             is Net.Sync -> {
                 b.add(1.toByte())
                 b.addAll(frame.toVarInt())
-                b.addAll(delta.encode())
+                b.addAll(encodeDelta(delta))
                 b.addAll(hash.toBytes())
             }
             is Net.Full -> {
                 b.add(2.toByte())
                 b.addAll(frame.toVarInt())
-                b.addAll(world.encode())
+                b.addAll(encodeWorld(world))
             }
             is Net.Ack -> {
                 b.add(3.toByte())
@@ -295,65 +293,38 @@ object NetCodec {
         return b.toByteArray()
     }
 
-    @JvmName("encodeDelta")
-    private fun Delta.encode(): ByteArray {
+    private fun encodeDelta(delta: Delta): ByteArray {
         val b = ByteBuilder()
-        forEach { (id, entity) ->
+        delta.forEach { (id, entity) ->
             b.addAll(id.toVarInt())
-            if (entity == null) {
-                b.add(0.toByte())
-            } else {
-                b.add(1.toByte())
-                b.addAll(entity.encode())
-            }
+            if (entity == null) b.add(0.toByte()) else { b.add(1.toByte()); b.addAll(encodeEntity(entity)) }
         }
         return b.toByteArray()
     }
 
-    @JvmName("encodeWorld")
-    private fun World.encode(): ByteArray {
+    private fun encodeWorld(world: World): ByteArray {
         val b = ByteBuilder()
-        forEach { (id, entity) ->
+        world.forEach { (id, entity) ->
             b.addAll(id.toVarInt())
-            b.addAll(entity.encode())
+            b.addAll(encodeEntity(entity))
         }
         return b.toByteArray()
     }
 
-    @JvmName("encodeEntity")
-    private fun Entity.encode(): ByteArray {
+    private fun encodeEntity(entity: Entity): ByteArray {
         val b = ByteBuilder()
-        b.addAll(size.toVarInt())
-        forEach { (key, value) ->
+        b.addAll(entity.size.toVarInt())
+        entity.forEach { (key, value) ->
             val keyBytes = key.encodeToByteArray()
             b.addAll(keyBytes.size.toVarInt())
             b.addAll(keyBytes)
 
             when (value) {
-                is Pos -> {
-                    b.add(0.toByte())
-                    b.addAll(value.vec.toBytes())
-                }
-                is HP -> {
-                    b.add(1.toByte())
-                    b.addAll(value.value.first.toBits().toBytes())
-                    b.addAll(value.value.second.toBits().toBytes())
-                }
-                is Team -> {
-                    b.add(2.toByte())
-                    b.addAll(value.id.toVarInt())
-                }
-                is Dmg -> {
-                    b.add(3.toByte())
-                    b.addAll(value.value.toBits().toBytes())
-                }
-                else -> {
-                    b.add(255.toByte())
-                    val str = value.toString()
-                    val strBytes = str.encodeToByteArray()
-                    b.addAll(strBytes.size.toVarInt())
-                    b.addAll(strBytes)
-                }
+                is Pos -> { b.add(0.toByte()); b.addAll(value.vec.toBytes()) }
+                is HP -> { b.add(1.toByte()); b.addAll(value.value.first.toBits().toBytes()); b.addAll(value.value.second.toBits().toBytes()) }
+                is Team -> { b.add(2.toByte()); b.addAll(value.id.toVarInt()) }
+                is Dmg -> { b.add(3.toByte()); b.addAll(value.value.toBits().toBytes()) }
+                else -> { b.add(255.toByte()); val strBytes = value.toString().encodeToByteArray(); b.addAll(strBytes.size.toVarInt()); b.addAll(strBytes) }
             }
         }
         return b.toByteArray()
@@ -362,7 +333,6 @@ object NetCodec {
     private fun Int.toVarInt(): ByteArray = this.toVarIntImpl()
     private fun Long.toVarInt(): ByteArray = this.toVarIntImpl()
 
-    // Internal generic varint builder for Int/Long
     private fun Long.toVarIntImpl(): ByteArray {
         val bytes = ArrayList<Byte>()
         var v = this
@@ -376,23 +346,17 @@ object NetCodec {
 
     private fun Int.toVarIntImpl(): ByteArray = this.toLong().toVarIntImpl()
 
-    private fun Vec3.toBytes(): ByteArray =
-        first.toBits().toBytes() + second.toBits().toBytes() + third.toBits().toBytes()
+    private fun Vec3.toBytes(): ByteArray = floatToIntBits(first).toBytes() + floatToIntBits(second).toBytes() + floatToIntBits(third).toBytes()
 
-    private fun Int.toBytes(): ByteArray = byteArrayOf(
-        (this shr 24).toByte(),
-        (this shr 16).toByte(),
-        (this shr 8).toByte(),
-        this.toByte()
-    )
+    private fun Int.toBytes(): ByteArray = byteArrayOf((this shr 24).toByte(), (this shr 16).toByte(), (this shr 8).toByte(), this.toByte())
 
-    private fun Float.toBits(): Int = java.lang.Float.floatToIntBits(this)
+    private fun floatToIntBits(v: Float): Int = v.toBits()
 
     private fun Cmd.encode(): ByteArray = when (this) {
-    is Cmd.Move -> ByteBuilder().apply { add(0.toByte()); addAll(id.toVarInt()); addAll(pos.toBytes()) }.toByteArray()
-    is Cmd.Attack -> ByteBuilder().apply { add(1.toByte()); addAll(from.toVarInt()); addAll(to.toVarInt()) }.toByteArray()
-    is Cmd.Build -> ByteBuilder().apply { add(2.toByte()); addAll(type.encodeToByteArray()); addAll(pos.toBytes()) }.toByteArray()
-    is Cmd.Spawn -> ByteBuilder().apply { add(3.toByte()); addAll(type.encodeToByteArray()); addAll(team.toVarInt()); addAll(pos.toBytes()) }.toByteArray()
+        is Cmd.Move -> ByteBuilder().apply { add(0.toByte()); addAll(id.toVarInt()); addAll(pos.toBytes()) }.toByteArray()
+        is Cmd.Attack -> ByteBuilder().apply { add(1.toByte()); addAll(from.toVarInt()); addAll(to.toVarInt()) }.toByteArray()
+        is Cmd.Build -> ByteBuilder().apply { add(2.toByte()); addAll(type.encodeToByteArray()); addAll(pos.toBytes()) }.toByteArray()
+        is Cmd.Spawn -> ByteBuilder().apply { add(3.toByte()); addAll(type.encodeToByteArray()); addAll(team.toVarInt()); addAll(pos.toBytes()) }.toByteArray()
     }
 }
 

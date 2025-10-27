@@ -14,7 +14,7 @@ import kotlin.math.min
 import kotlin.math.max
 import kotlin.random.Random
 
-data class Unit(
+data class GameUnit(
     override val id: String,
     override val position: Position,
     override val health: Float,
@@ -57,15 +57,33 @@ data class Unit(
     val authority: Float = 1.0f,
     val patrolTarget: Position? = null
 ) : Entity() {
-    fun updatePosition(newPosition: Position): Unit {
+    fun updatePosition(newPosition: Position): GameUnit {
         return copy(position = newPosition)
     }
 
-    fun setPath(newPath: List<Position>): Unit {
+    fun setPath(newPath: List<Position>): GameUnit {
         return copy(path = newPath, currentPathIndex = 0)
     }
 
-    fun startGathering(targetId: String): Unit {
+    // Derived property: considered moving when a path exists and index is in range
+    val isMoving: Boolean
+        get() = path.isNotEmpty() && currentPathIndex >= 0 && currentPathIndex < path.size
+
+    /**
+     * Advance to the next waypoint in the path. If there is a next waypoint,
+     * update the position to that waypoint and bump the index. If this was
+     * the final waypoint, clear the path and reset index.
+     */
+    fun advancePath(): GameUnit {
+        return if (currentPathIndex + 1 < path.size) {
+            val nextIndex = currentPathIndex + 1
+            copy(currentPathIndex = nextIndex, position = path[nextIndex])
+        } else {
+            copy(path = emptyList(), currentPathIndex = 0)
+        }
+    }
+
+    fun startGathering(targetId: String): GameUnit {
         return copy(
             isGathering = true,
             gatheringTargetId = targetId,
@@ -73,7 +91,7 @@ data class Unit(
         )
     }
 
-    fun stopGathering(): Unit {
+    fun stopGathering(): GameUnit {
         return copy(
             isGathering = false,
             gatheringTargetId = null,
@@ -81,7 +99,7 @@ data class Unit(
         )
     }
 
-    fun gainGatheringExperience(amount: Float): Unit {
+    fun gainGatheringExperience(amount: Float): GameUnit {
         val newExperience = gatheringExperience + amount
         val newLevel = if (newExperience >= gatheringLevel * 100f) {
             gatheringLevel + 1
@@ -95,7 +113,7 @@ data class Unit(
         )
     }
 
-    fun equipTool(tool: GatheringTool): Unit {
+    fun equipTool(tool: GatheringTool): GameUnit {
         return copy(equippedTool = tool)
     }
 
@@ -106,7 +124,7 @@ data class Unit(
         return baseRate * specializationBonus * toolBonus * gatheringEfficiency
     }
 
-    fun startAttacking(targetId: String): Unit {
+    fun startAttacking(targetId: String): GameUnit {
         return copy(
             isAttacking = true,
             attackTargetId = targetId,
@@ -114,7 +132,7 @@ data class Unit(
         )
     }
 
-    fun stopAttacking(): Unit {
+    fun stopAttacking(): GameUnit {
         return copy(
             isAttacking = false,
             attackTargetId = null,
@@ -122,41 +140,41 @@ data class Unit(
         )
     }
 
-    fun updateAttackCooldown(deltaTime: Float): Unit {
+    fun updateAttackCooldown(deltaTime: Float): GameUnit {
         return copy(
             attackCooldown = maxOf(0f, attackCooldown - deltaTime)
         )
     }
 
-    fun updateEnergy(deltaTime: Float): Unit {
+    fun updateEnergy(deltaTime: Float): GameUnit {
         val newEnergy = min(maxEnergy, energy + energyRegen * deltaTime)
         return copy(energy = newEnergy)
     }
 
-    fun updateAbilityCooldowns(deltaTime: Float): Unit {
+    fun updateAbilityCooldowns(deltaTime: Float): GameUnit {
         val updatedCooldowns = abilityCooldowns.mapValues { (_, cooldown) ->
             maxOf(0f, cooldown - deltaTime)
         }.filter { it.value > 0f }
         return copy(abilityCooldowns = updatedCooldowns)
     }
 
-    fun addAbility(abilityId: String): Unit {
+    fun addAbility(abilityId: String): GameUnit {
         return copy(abilities = abilities + abilityId)
     }
 
-    fun removeAbility(abilityId: String): Unit {
+    fun removeAbility(abilityId: String): GameUnit {
         return copy(abilities = abilities - abilityId)
     }
 
-    fun addEffect(effect: Effect): Unit {
+    fun addEffect(effect: Effect): GameUnit {
         return copy(activeEffects = activeEffects + effect)
     }
 
-    fun removeEffect(effectType: EffectType): Unit {
+    fun removeEffect(effectType: EffectType): GameUnit {
         return copy(activeEffects = activeEffects.filter { it.type != effectType })
     }
 
-    fun updateEffects(deltaTime: Float): Unit {
+    fun updateEffects(deltaTime: Float): GameUnit {
         val updatedEffects = activeEffects.mapNotNull { effect ->
             if (effect.duration <= 0f) null
             else effect.copy(duration = effect.duration - deltaTime)
@@ -164,19 +182,19 @@ data class Unit(
         return copy(activeEffects = updatedEffects)
     }
 
-    fun updateVelocity(newVelocity: Position): Unit {
+    fun updateVelocity(newVelocity: Position): GameUnit {
         return copy(velocity = newVelocity)
     }
 
-    fun updateAngle(newAngle: Float): Unit {
+    fun updateAngle(newAngle: Float): GameUnit {
         return copy(angle = newAngle)
     }
 
-    fun updateAuthority(newAuthority: Float): Unit {
+    fun updateAuthority(newAuthority: Float): GameUnit {
         return copy(authority = newAuthority)
     }
 
-    fun updatePatrolTarget(newTarget: Position?): Unit {
+    fun updatePatrolTarget(newTarget: Position?): GameUnit {
         return copy(patrolTarget = newTarget)
     }
 }

@@ -1,7 +1,7 @@
 package com.rtsgame.shared.systems
 
 import com.rtsgame.shared.config.FormationConfig
-import com.rtsgame.shared.entity.Unit
+import com.rtsgame.shared.entity.GameUnit
 import com.rtsgame.shared.game.GameState
 import com.rtsgame.shared.map.Position
 import kotlin.math.cos
@@ -11,9 +11,33 @@ import kotlin.math.sqrt
 class FormationSystem(internal val config: FormationConfig) {
     companion object {
         internal const val DEFAULT_UNIT_SIZE = 10f
+        /**
+         * Small helper used by tests and simple formation placements.
+         * For a single unit (unitCount <= 1) the canonical slot is the leader's position.
+         * More sophisticated distributions may be implemented later.
+         */
+        fun calculateSlot(leaderPosition: Position, spacing: Float, index: Int, unitCount: Int): Position {
+            if (unitCount <= 1) return leaderPosition
+
+            // For larger groups, arrange on a circle for better distribution
+            if (unitCount >= 8) {
+                val radius = spacing * (unitCount.toFloat() / 6f)
+                val angle = 2f * kotlin.math.PI.toFloat() * (index.toFloat() / unitCount.toFloat())
+                val x = leaderPosition.x + kotlin.math.cos(angle) * radius
+                val y = leaderPosition.y + kotlin.math.sin(angle) * radius
+                return Position(x, y)
+            }
+
+            // Center units around the leader in a line. For n units, offset each by (i - (n-1)/2) * spacing
+            val centerOffset = (unitCount - 1).toFloat() / 2f
+            val offset = (index.toFloat() - centerOffset) * spacing
+            val x = leaderPosition.x + offset
+            val y = leaderPosition.y
+            return Position(x, y)
+        }
     }
 
-    fun updateFormation(unit: Unit, gameState: GameState): Unit {
+    fun updateFormation(unit: GameUnit, gameState: GameState): GameUnit {
         val leader = findLeader(unit, gameState)
         return if (leader == null || leader == unit) {
             // Unit is its own leader
@@ -24,16 +48,16 @@ class FormationSystem(internal val config: FormationConfig) {
         }
     }
 
-    internal fun findLeader(unit: Unit, gameState: GameState): Unit? {
+    internal fun findLeader(unit: GameUnit, gameState: GameState): GameUnit? {
         val strategicRange = config.commandRanges.strategic
         return gameState.entities.values
-            .filterIsInstance<Unit>()
+            .filterIsInstance<GameUnit>()
             .filter { it.team == unit.team && it != unit }
             .filter { it.position.distanceTo(unit.position) <= strategicRange }
             .maxByOrNull { it.authority }
     }
 
-    internal fun updateLeader(unit: Unit): Unit {
+    internal fun updateLeader(unit: GameUnit): GameUnit {
         // Leader uses default movement and targeting
         return unit.copy(
             leaderTargetPosition = unit.patrolTarget,
@@ -42,7 +66,7 @@ class FormationSystem(internal val config: FormationConfig) {
         )
     }
 
-    internal fun updateFollower(unit: Unit, leader: Unit): Unit {
+    internal fun updateFollower(unit: GameUnit, leader: GameUnit): GameUnit {
         // Check if follower is too far from leader
         val maxSeparationDistance = config.commandRanges.strategic * config.maxFollowerSeparationDistanceFactor
         if (unit.position.distanceTo(leader.position) > maxSeparationDistance) {
@@ -57,14 +81,22 @@ class FormationSystem(internal val config: FormationConfig) {
 
         // Predict leader's future position
         val predictedPosition = predictLeaderPosition(leader)
-        val idealSlot = calculateIdealFormationSlot(unit, predictedPosition)
+        // Determine group's followers deterministically and compute an index for this unit
+        val followers = gameState.entities.values
+            .filterIsInstance<GameUnit>()
+            .filter { it.team == leader.team && it != leader }
+            .sortedBy { it.id }
+        val unitIndex = followers.indexOfFirst { it.id == unit.id }.let { if (it < 0) 0 else it }
+        val unitCount = followers.size
+        val spacing = config.minFormationSlotDistance
+        val idealSlot = calculateSlot(predictedPosition, spacing, unitIndex, unitCount)
 
         // Calculate and apply steering forces
         val steering = calculateSteeringForces(unit, idealSlot)
         return applySteeringForces(unit, steering, predictedPosition, idealSlot)
     }
 
-    internal fun predictLeaderPosition(leader: Unit): Position {
+    internal fun predictLeaderPosition(leader: GameUnit): Position {
         val predictionTime = config.predictionTimeSeconds
         return Position(
             leader.position.x + leader.velocity.x * predictionTime,
@@ -72,7 +104,7 @@ class FormationSystem(internal val config: FormationConfig) {
         )
     }
 
-    internal fun calculateIdealFormationSlot(unit: Unit, leaderPosition: Position): Position {
+    internal fun calculateIdealFormationSlot(unit: GameUnit, leaderPosition: Position): Position {
         val angle = unit.formationAngle
         val distance = config.minFormationSlotDistance
         return Position(
@@ -81,7 +113,7 @@ class FormationSystem(internal val config: FormationConfig) {
         )
     }
 
-    internal fun calculateSteeringForces(unit: Unit, targetPosition: Position): Position {
+    internal fun calculateSteeringForces(unit: GameUnit, targetPosition: Position): Position {
         var steering = Position(0f, 0f)
 
         // Seek/Arrive force
@@ -106,7 +138,7 @@ class FormationSystem(internal val config: FormationConfig) {
         return steering
     }
 
-    internal fun calculateSeekForce(unit: Unit, targetPosition: Position): Position {
+    internal fun calculateSeekForce(unit: GameUnit, targetPosition: Position): Position {
         val toTarget = targetPosition - unit.position
         val distance = sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y)
         
@@ -125,13 +157,13 @@ class FormationSystem(internal val config: FormationConfig) {
         }
     }
 
-    internal fun calculateSeparationForce(unit: Unit): Position {
+    internal fun calculateSeparationForce(unit: GameUnit): Position {
         // Backwards-compatible: default to no nearby units
         return calculateSeparationForce(unit, emptyList())
     }
 
     // Testable variant: accepts nearby units so unit tests can inject neighbors.
-    internal fun calculateSeparationForce(unit: Unit, nearbyUnits: List<Unit>): Position {
+    internal fun calculateSeparationForce(unit: GameUnit, nearbyUnits: List<GameUnit>): Position {
         var force = Position(0f, 0f)
         val neighborRadius = DEFAULT_UNIT_SIZE * config.neighborRadiusFactor
 
@@ -152,17 +184,17 @@ class FormationSystem(internal val config: FormationConfig) {
         return force
     }
 
-    internal fun calculateTerrainAvoidanceForce(unit: Unit): Position {
+    internal fun calculateTerrainAvoidanceForce(unit: GameUnit): Position {
         // TODO: Implement terrain avoidance using feeler
         return Position(0f, 0f)
     }
 
     internal fun applySteeringForces(
-        unit: Unit,
+        unit: GameUnit,
         steering: Position,
         predictedPosition: Position,
         idealSlot: Position
-    ): Unit {
+    ): GameUnit {
         // Apply steering to velocity
         val newVelocity = unit.velocity + steering
 
@@ -184,7 +216,7 @@ class FormationSystem(internal val config: FormationConfig) {
             unit.angle
         }
 
-        return unit.copy(
+    return unit.copy(
             velocity = finalVelocity,
             angle = newAngle,
             leaderPredictedPosition = predictedPosition,

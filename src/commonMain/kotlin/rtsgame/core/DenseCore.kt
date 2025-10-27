@@ -39,18 +39,13 @@ typealias Effect<T> = suspend (World) -> Pair<World, T>
 typealias System = suspend (World, Duration) -> World
 
 // Dense component definitions using value classes (portable)
-@JvmInline
-value class Pos(val vec: Vec3)
-@JvmInline
-value class Vel(val vec: Vec3)
-@JvmInline
-value class HP(val value: Pair<Float, Float>) // current, max
-@JvmInline
-value class Team(val id: Int)
-@JvmInline
-value class Dmg(val value: Float)
-@JvmInline
-value class Range(val value: Float)
+data class Pos(val vec: Vec3)
+data class Vel(val vec: Vec3)
+data class Target(val vec: Vec3)
+data class HP(val value: Pair<Float, Float>) // current, max
+data class Team(val id: Int)
+data class Dmg(val value: Float)
+data class Range(val value: Float)
 
 // Legacy component aliases for MainJvm compatibility
 typealias CommandComponent = String
@@ -62,11 +57,9 @@ typealias ComponentTypeId = String
 // Component lens operators
 inline operator fun <reified T> Entity.get(key: String): T? = this[key] as? T
 // Avoid recursive call to the same operator; delegate to standard Map+ overload by wrapping into a Map
-@JvmName("entityPlus")
-inline operator fun Entity.plus(pair: Pair<String, Component>): Entity = this + mapOf(pair)
+fun Entity.plusEntry(pair: Pair<String, Component>): Entity = this + mapOf(pair)
 inline operator fun World.get(id: EntityId): Entity? = this[id]
-@JvmName("worldPlus")
-inline operator fun World.plus(pair: Pair<EntityId, Entity>): World = this + mapOf(pair)
+fun World.plusWorldEntry(pair: Pair<EntityId, Entity>): World = this + mapOf(pair)
 
 // Functional entity queries
 inline fun <reified T> World.with(component: String): Sequence<Pair<EntityId, T>> =
@@ -81,8 +74,29 @@ object Game {
     val interpret: (Cmd) -> Effect<Unit> = { cmd ->
         { world ->
             when (cmd) {
-                is Cmd.Move -> world.update(cmd.id) { 
-                    it + ("pos" to Pos(cmd.pos))
+                is Cmd.Move -> world.update(cmd.id) { entity ->
+                    val currentPos = entity.get<Pos>("pos")?.vec ?: Vec3(0f, 0f, 0f)
+                    val speed = 10f // units per second, TODO: make configurable
+                    
+                    // Calculate direction and velocity
+                    val dx = cmd.pos.first - currentPos.first
+                    val dy = cmd.pos.second - currentPos.second
+                    val dz = cmd.pos.third - currentPos.third
+                    val distance = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+                    
+                    if (distance < 0.1f) {
+                        // Already at target, just update position
+                        entity.plusEntry("pos" to Pos(cmd.pos))
+                    } else {
+                        val velocity = Vec3(
+                            dx / distance * speed,
+                            dy / distance * speed,
+                            dz / distance * speed
+                        )
+                        entity
+                            .plusEntry("target" to Target(cmd.pos))
+                            .plusEntry("vel" to Vel(velocity))
+                    }
                 } to Unit
                 
                 is Cmd.Attack -> {
@@ -91,7 +105,7 @@ object Game {
                         val hp = target.get<HP>("hp") ?: HP(100f to 100f)
                         val newHp = hp.value.first - damage
                         if (newHp <= 0) target - "hp"
-                        else target + ("hp" to HP(newHp to hp.value.second))
+                        else target.plusEntry("hp" to HP(newHp to hp.value.second))
                     } to Unit
                 }
                 
@@ -102,7 +116,7 @@ object Game {
                         "pos" to Pos(cmd.pos),
                         "hp" to HP(1000f to 1000f)
                     )
-                    world + (newId to building) to Unit
+                    world.plusWorldEntry(newId to building) to Unit
                 }
                 
                 is Cmd.Spawn -> {
@@ -115,7 +129,7 @@ object Game {
                         "dmg" to Dmg(10f),
                         "range" to Range(50f)
                     )
-                    world + (newId to unit) to Unit
+                    world.plusWorldEntry(newId to unit) to Unit
                 }
             }
         }
@@ -125,9 +139,9 @@ object Game {
     val movement: System = { world, dt ->
         val secondsFactor = dt.inWholeMilliseconds.toFloat() / 1000f
         world.with<Vel>("vel").fold(world) { w, (id, vel) ->
-            w.update(id) { entity ->
+                w.update(id) { entity ->
                 val pos = entity.get<Pos>("pos") ?: return@update entity
-                entity + ("pos" to Pos(pos.vec + vel.vec * secondsFactor))
+                entity.plusEntry("pos" to Pos(pos.vec + vel.vec * secondsFactor))
             }
         }
     }
@@ -217,6 +231,15 @@ fun Vec3.dist(other: Vec3): Float {
     val dy = second - other.second
     val dz = third - other.third
     return sqrt(dx * dx + dy * dy + dz * dz)
+}
+
+operator fun Vec3.minus(other: Vec3): Vec3 =
+    Triple(first - other.first, second - other.second, third - other.third)
+
+fun Vec3.normalize(): Vec3 {
+    val len = sqrt(first * first + second * second + third * third)
+    return if (len > 0) Triple(first / len, second / len, third / len)
+    else this
 }
 
 // Dense codec for network serialization

@@ -16,8 +16,8 @@ class FormationSystemTDDTest {
         // Expect: single unit should be at leader position (or a canonical offset)
         val expected = Position(5f, 5f)
 
-        // Act: placeholder — replace with FormationSystem.calculateSlot(...) call
-        val actual = Position(0f, 0f) // TODO: implement formation slot calculation
+    // Act: call the (test-friendly) helper to compute the slot
+    val actual = FormationSystem.calculateSlot(leader, spacing, 0, unitCount)
 
         // Assert (seed)
         assertEquals(expected.x, actual.x, "slot x should match expected for single unit")

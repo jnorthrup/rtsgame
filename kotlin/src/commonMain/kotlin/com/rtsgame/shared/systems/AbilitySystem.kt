@@ -2,7 +2,7 @@ package com.rtsgame.shared.systems
 
 import com.rtsgame.shared.command.GameState
 import com.rtsgame.shared.entity.Entity
-import com.rtsgame.shared.entity.Unit
+import com.rtsgame.shared.entity.GameUnit
 import com.rtsgame.shared.game.GameState
 import com.rtsgame.shared.map.GameMap
 import com.rtsgame.shared.map.Position

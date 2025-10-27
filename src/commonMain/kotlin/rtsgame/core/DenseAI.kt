@@ -1,5 +1,6 @@
 package rtsgame.core
 
+import trikeshed.lib.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlin.math.*
@@ -7,12 +8,23 @@ import kotlin.random.Random
 
 /**
  * Dense AI using functional reactive programming and emergent behaviors
+ * μ-Chain: Performance Purity - eliminating String keys in hot paths
  */
 
-// AI types
-typealias Perception = (World, EntityId) -> Map<String, Any>
-typealias Decision = (Map<String, Any>) -> Cmd?
-typealias Behavior = Pair<Perception, Decision>
+// μ-Chain: Axiomatic Aliasing - typed perception data using Join composition
+data class PerceptionData(
+    val id: EntityId,
+    val pos: Vec3,
+    val allies: Indexed<Join<EntityId, Float>>,  // (id, distance) pairs
+    val enemies: Indexed<Join<EntityId, Float>>,
+    val resources: Indexed<Join<Vec3, Float>>,  // (position, distance) pairs
+    val threat: Int
+)
+
+// μ-Chain: Functional Extension - perception and decision types
+typealias Perception = (World, EntityId) -> PerceptionData?
+typealias Decision = (PerceptionData) -> Cmd?
+typealias Behavior = Join<Perception, Decision>
 
 // Spatial reasoning
 data class SpatialContext(
@@ -25,137 +37,143 @@ data class SpatialContext(
 
 // Tactical primitives
 object Tactics {
-    // Perception functions
+    // μ-Chain: Functional Extension - perception functions with typed data
     val spatial: Perception = spatialLbl@ { world, id ->
-    val entity = world[id] ?: return@spatialLbl emptyMap()
-    val pos = entity.get<Pos>("pos")?.vec ?: return@spatialLbl emptyMap()
-    val team = entity.get<Team>("team")?.id ?: return@spatialLbl emptyMap()
-        
-        val allies = world.with<Team>("team")
-            .filter { entry: Pair<EntityId, Team> -> entry.second.id == team }
-            .mapNotNull { entry: Pair<EntityId, Team> ->
-                val otherId = entry.first
-                if (otherId == id) return@mapNotNull null
+        val entity = world[id] ?: return@spatialLbl null
+        val pos = entity.get<Pos>("pos")?.vec ?: return@spatialLbl null
+        val team = entity.get<Team>("team")?.id ?: return@spatialLbl null
+
+        // μ-Chain: Metaseries Composition - batch processing with functional transforms
+        val alliesList = world.with<Team>("team")
+            .filter { (otherId, t): Pair<EntityId, Team> -> t.id == team && otherId != id }
+            .mapNotNull { (otherId, _): Pair<EntityId, Team> ->
                 world[otherId]?.get<Pos>("pos")?.vec?.let { otherPos ->
-                    otherId to pos.dist(otherPos)
+                    Join(otherId, pos.dist(otherPos))
                 }
             }
-            .sortedBy { it.second }
+            .sortedBy { it.r }
             .take(5)
-        
-        val enemies = world.with<Team>("team")
-            .filter { entry: Pair<EntityId, Team> -> entry.second.id != team }
-            .mapNotNull { entry: Pair<EntityId, Team> ->
-                val enemyId = entry.first
+            .toList()
+
+        val enemiesList = world.with<Team>("team")
+            .filter { (_, t): Pair<EntityId, Team> -> t.id != team }
+            .mapNotNull { (enemyId, _): Pair<EntityId, Team> ->
                 world[enemyId]?.get<Pos>("pos")?.vec?.let { enemyPos ->
-                    enemyId to pos.dist(enemyPos)
+                    Join(enemyId, pos.dist(enemyPos))
                 }
             }
-            .sortedBy { it.second }
+            .sortedBy { it.r }
             .take(5)
-        
-        mapOf(
-            "pos" to pos,
-            "team" to team,
-            "allies" to allies,
-            "enemies" to enemies,
-            "threat" to enemies.count { it.second < 100f }
+            .toList()
+
+        PerceptionData(
+            id = id,
+            pos = pos,
+            allies = Indexed.fromList(alliesList),
+            enemies = Indexed.fromList(enemiesList),
+            resources = Indexed.fromList(emptyList()),
+            threat = enemiesList.count { it.r < 100f }
         )
     }
     
     val economic: Perception = economicLbl@ { world, id ->
-        val entity = world[id] ?: return@economicLbl emptyMap()
-        val pos = entity.get<Pos>("pos")?.vec ?: return@economicLbl emptyMap()
-        
-        val resources = world.asSequence()
+        val entity = world[id] ?: return@economicLbl null
+        val pos = entity.get<Pos>("pos")?.vec ?: return@economicLbl null
+        val team = entity.get<Team>("team")?.id ?: return@economicLbl null
+
+        val resourcesList = world.asSequence()
             .filter { (_, ent): Map.Entry<EntityId, Entity> -> ent["type"] == "resource" }
             .mapNotNull { (_, ent): Map.Entry<EntityId, Entity> ->
-                ent.get<Pos>("pos")?.vec?.let { resourcePos -> resourcePos to pos.dist(resourcePos) }
+                ent.get<Pos>("pos")?.vec?.let { resourcePos ->
+                    Join(resourcePos, pos.dist(resourcePos))
+                }
             }
-            .sortedBy { it.second }
+            .sortedBy { it.r }
             .take(3)
             .toList()
-        
-        mapOf(
-            "resources" to resources,
-            "hasResources" to resources.isNotEmpty()
+
+        PerceptionData(
+            id = id,
+            pos = pos,
+            allies = Indexed.fromList(emptyList()),
+            enemies = Indexed.fromList(emptyList()),
+            resources = Indexed.fromList(resourcesList),
+            threat = 0
         )
     }
     
     // Decision functions
     val fight: Decision = fightLbl@ { perception ->
-    val enemies = perception["enemies"] as? List<Pair<EntityId, Float>> ?: return@fightLbl null
-    val pos = perception["pos"] as? Vec3 ?: return@fightLbl null
-        
-        enemies.firstOrNull()?.let { (target, dist) ->
-            if (dist < 50f) {
-                Cmd.Attack(perception["id"] as EntityId, target)
-            } else {
-                // Move towards enemy
-                val targetPos = perception["targetPos"] as? Vec3 ?: pos
-                Cmd.Move(perception["id"] as EntityId, targetPos)
-            }
+        val enemyCount = perception.enemies.size
+        if (enemyCount == 0) return@fightLbl null
+
+        val nearestEnemy = perception.enemies.play[0]
+        val target = nearestEnemy.l
+        val dist = nearestEnemy.r
+
+        if (dist < 50f) {
+            Cmd.Attack(perception.id, target)
+        } else {
+            // Move towards enemy position (simplified - would need enemy position lookup)
+            Cmd.Move(perception.id, perception.pos)
         }
     }
     
     val flee: Decision = fleeLbl@ { perception ->
-        val threat = perception["threat"] as? Int ?: 0
-        if (threat > 2) {
-            val pos = perception["pos"] as? Vec3 ?: return@fleeLbl null
-            val enemies = perception["enemies"] as? List<Pair<EntityId, Float>> ?: return@fleeLbl null
-            
-            // Calculate escape vector
-        val escapeVector = enemies.fold(Vec3(0f, 0f, 0f)) { acc: Vec3, pair: Pair<EntityId, Float> ->
-            val dist = pair.second
+        if (perception.threat <= 2) return@fleeLbl null
+
+        // Calculate escape vector from enemy threats
+        val escapeVector = perception.enemies.play.fold(Vec3(0f, 0f, 0f)) { acc: Vec3, enemyJoin: Join<EntityId, Float> ->
+            val dist = enemyJoin.r
             val weight = 1f / (dist + 1f)
-            acc + pos * weight
-            }.let { 
-                if (it != Vec3(0f, 0f, 0f)) it * -1f
-                else Vec3(Random.nextFloat() - 0.5f, Random.nextFloat() - 0.5f, 0f)
-            }
-            
-            Cmd.Move(perception["id"] as EntityId, pos + escapeVector * 50f)
-        } else null
+            acc + perception.pos * weight
+        }.let {
+            if (it != Vec3(0f, 0f, 0f)) it * -1f
+            else Vec3(Random.nextFloat() - 0.5f, Random.nextFloat() - 0.5f, 0f)
+        }
+
+        Cmd.Move(perception.id, perception.pos + escapeVector * 50f)
     }
     
     val gather: Decision = gatherLbl@ { perception ->
-        val resources = perception["resources"] as? List<Pair<Vec3, Float>> ?: return@gatherLbl null
-        resources.firstOrNull()?.let { (resourcePos, _) ->
-            Cmd.Move(perception["id"] as EntityId, resourcePos)
-        }
+        if (perception.resources.size == 0) return@gatherLbl null
+
+        val nearestResource = perception.resources.play[0]
+        val resourcePos = nearestResource.l
+        Cmd.Move(perception.id, resourcePos)
     }
 }
 
 // Composite behaviors using monadic composition
 object Behaviors {
-    // Behavior combinators
-    infix fun Behavior.or(other: Behavior): Behavior = 
-        first to { perception ->
-            this.second(perception) ?: other.second(perception)
+    // μ-Chain: Operator Application - behavior combinators with Join
+    infix fun Behavior.or(other: Behavior): Behavior =
+        Join(this.l) { perception ->
+            this.r(perception) ?: other.r(perception)
         }
-    
+
     infix fun Behavior.then(other: Behavior): Behavior =
-        { world: World, id: EntityId -> 
-            this.first(world, id) + other.first(world, id)
-        } to { perception: Map<String, Any> ->
-            this@then.second(perception) ?: other.second(perception)
+        Join({ world: World, id: EntityId ->
+            this.l(world, id) ?: other.l(world, id)
+        }) { perception: PerceptionData ->
+            this@then.r(perception) ?: other.r(perception)
         }
-    
+
     fun Behavior.withPriority(priority: Float): Behavior =
-        first to { perception ->
-            if (Random.nextFloat() < priority) this.second(perception)
+        Join(this.l) { perception ->
+            if (Random.nextFloat() < priority) this.r(perception)
             else null
         }
-    
+
     // Composite behaviors
-    val aggressive = (Tactics.spatial to Tactics.fight) or 
-                    (Tactics.economic to Tactics.gather)
+    val aggressive = Join(Tactics.spatial, Tactics.fight) or
+                    Join(Tactics.economic, Tactics.gather)
+
+    val defensive = Join(Tactics.spatial, Tactics.flee) or
+                   Join(Tactics.spatial, Tactics.fight).withPriority(0.3f)
     
-    val defensive = (Tactics.spatial to Tactics.flee) or
-                   (Tactics.spatial to Tactics.fight).withPriority(0.3f)
-    
-    val economic = (Tactics.economic to Tactics.gather) or
-                  (Tactics.spatial to Tactics.flee)
+    val economic = Join(Tactics.economic, Tactics.gather) or
+                  Join(Tactics.spatial, Tactics.flee)
 }
 
 // Neural-inspired decision networks
@@ -391,12 +409,4 @@ class StrategyAI(
         emptyList() // Simplified
 }
 
-// Helper extensions
-fun Vec3.normalize(): Vec3 {
-    val len = sqrt(first * first + second * second + third * third)
-    return if (len > 0) Vec3(first / len, second / len, third / len)
-    else this
-}
-
-operator fun Vec3.minus(other: Vec3): Vec3 =
-    Vec3(first - other.first, second - other.second, third - other.third)
+// Helper extensions moved to DenseCore.kt for shared access

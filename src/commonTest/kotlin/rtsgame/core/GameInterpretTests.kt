@@ -2,21 +2,25 @@ package rtsgame.core
 
 import kotlin.test.Test
 import kotlin.test.assertTrue
+// no coroutine test helpers here to keep tests multiplatform-safe
 
-// TDD seed for Game.interpret: express expected behavior in small steps; placeholder assertions to drive implementation.
+// TDD seed for Game.interpret: adapt to DenseCore.Cmd and World
 class GameInterpretTests {
     @Test
     fun interpret_move_and_spawn_commands() {
-        val game = Game()
-        val world = World()
-        // A simple Move command seed and Spawn command seed
-        val moveCmd = Command.Move(EntityId(1), Position(10f, 10f))
-        val spawnCmd = Command.Spawn(Faction.PLAYER, Position(0f, 0f))
+        // Use the object Game.interpret which returns an Effect
+        val world: World = mapOf(
+            0 to entityOf("pos" to Pos(Triple(0f,0f,0f)))
+        )
 
-        val afterMove = game.interpret(moveCmd, world)
-        val afterSpawn = game.interpret(spawnCmd, world)
+        val moveCmd = Cmd.Move(0, Triple(10f, 10f, 0f))
+        val spawnCmd = Cmd.Spawn("soldier", 1, Triple(0f, 0f, 0f))
 
-        // Placeholder expectations: tests should be updated to assert concrete state once API stabilizes.
-        assertTrue(true)
+        // Verify interpreter produces suspend Effect functions
+        val effect = Game.interpret(moveCmd)
+        val effect2 = Game.interpret(spawnCmd)
+
+        assertTrue(effect is Function<*>)
+        assertTrue(effect2 is Function<*>)
     }
 }

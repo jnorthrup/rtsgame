@@ -1,7 +1,7 @@
 package com.rtsgame.shared.command
 
 import com.rtsgame.shared.entity.Position
-import com.rtsgame.shared.entity.Unit
+import com.rtsgame.shared.entity.GameUnit
 import com.rtsgame.shared.game.GameState
 import com.rtsgame.shared.map.GameMap
 import com.rtsgame.shared.map.GatheringTool

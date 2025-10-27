@@ -20,7 +20,19 @@ kotlin {
     }
     
     js(IR) {
-        browser()
+        browser {
+            testTask {
+                // If CHROME_BIN isn't set (no Chrome on CI/local), disable browser tests and rely on nodejs runner
+                val chromeBin = System.getenv("CHROME_BIN")
+                if (chromeBin == null) {
+                    enabled = false
+                } else {
+                    useKarma {
+                        useChromeHeadless()
+                    }
+                }
+            }
+        }
         nodejs()
     }
     
@@ -38,6 +50,7 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
             }
         }
         
