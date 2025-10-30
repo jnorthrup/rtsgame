@@ -298,4 +298,43 @@ class CommandSystemQueueLifecycleTDDTest {
         CommandSystem.cancelCommand(entrenched.id)
         CommandSystem.cancelCommand(joint.id)
     }
+
+    @Test
+    fun `preempted command returns to queue for later resumption`() {
+        CommandSystem.resetForTests()
+        val world = object {}
+        val unitId = 901
+
+        val lowPriority = CommandSystem.Command(
+            id = "queue_test_preempt_low",
+            type = "test",
+            unitIds = listOf(unitId),
+            parameters = emptyMap()
+        )
+
+        CommandSystem.queueCommand(unitId, lowPriority, priority = 1)
+        CommandSystem.updateCommands(world, 1f / 60f)
+
+        assertTrue(CommandSystem.isCommandActive(lowPriority.id), "low priority command should start executing")
+
+        val highPriority = CommandSystem.Command(
+            id = "queue_test_preempt_high",
+            type = "test",
+            unitIds = listOf(unitId),
+            parameters = emptyMap()
+        )
+
+        CommandSystem.queueCommand(unitId, highPriority, priority = 7)
+        CommandSystem.updateCommands(world, 1f / 60f)
+
+        assertFalse(CommandSystem.isCommandActive(lowPriority.id), "low priority command should be preempted")
+        assertTrue(CommandSystem.isCommandActive(highPriority.id), "high priority command should take over execution")
+
+        CommandSystem.cancelCommand(highPriority.id)
+        CommandSystem.updateCommands(world, 1f / 60f)
+
+        assertTrue(CommandSystem.isCommandActive(lowPriority.id), "preempted command should return to the queue and resume once higher priority command completes")
+
+        CommandSystem.cancelCommand(lowPriority.id)
+    }
 }

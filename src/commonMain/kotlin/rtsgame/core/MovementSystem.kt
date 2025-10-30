@@ -52,6 +52,9 @@ object MovementSystem {
         path: List<Position>,
         predictionTime: Float
     ): Position {
+        if (predictionTime <= 0f) {
+            return current
+        }
         if (path.isEmpty()) {
             // No path available, fall back to velocity projection
             val projectedX = current.x + velocity.first * predictionTime

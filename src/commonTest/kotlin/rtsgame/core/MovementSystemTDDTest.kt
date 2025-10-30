@@ -78,4 +78,17 @@ class MovementSystemTDDTest {
         val resultNegative = MovementSystem.stepPosition(current, target, speed = -5f, dt = 1f)
         assertEquals(current, resultNegative, "negative speed should not move the unit")
     }
+
+    @Test
+    fun `predict position stays put when prediction window is non positive`() {
+        val current = Position(0f, 0f)
+        val velocity = Vec3(5f, 0f, 0f)
+        val path = listOf(Position(10f, 0f))
+
+        val zeroWindow = MovementSystem.predictPositionAlongPath(current, velocity, path, predictionTime = 0f)
+        assertEquals(current, zeroWindow, "zero prediction time should leave unit at current position")
+
+        val negativeWindow = MovementSystem.predictPositionAlongPath(current, velocity, path, predictionTime = -2f)
+        assertEquals(current, negativeWindow, "negative prediction time should leave unit at current position")
+    }
 }

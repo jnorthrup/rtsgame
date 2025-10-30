@@ -866,17 +866,32 @@ object CommandSystem {
     }
 
     private fun preemptLowerPriorityCommands(command: Command, candidatePriorityFloor: Int) {
-        val affectedActiveIds = activeCommands
+        val overlappingActives = activeCommands
             .filter { (_, activeCommand) ->
                 activeCommand.unitIds.any { it in command.unitIds }
             }
-            .map { it.key }
 
-        for (activeId in affectedActiveIds) {
+        for ((activeId, activeCommand) in overlappingActives) {
             val activePriority = commandPriorities[activeId] ?: 0
             if (activePriority < candidatePriorityFloor) {
                 activeCommands.remove(activeId)
                 commandPriorities.remove(activeId)
+                requeuePreemptedCommand(activeCommand, activePriority)
+            }
+        }
+    }
+
+    private fun requeuePreemptedCommand(command: Command?, priority: Int) {
+        if (command == null) return
+
+        commandPriorities[command.id] = priority
+        commandArrivalOrder[command.id] = nextArrivalSequence++
+        commandWaitTicks[command.id] = 0
+
+        for (unitId in command.unitIds) {
+            val queue = commandQueues.getOrPut(unitId) { mutableListOf() }
+            if (queue.none { it.id == command.id }) {
+                queue.add(command)
             }
         }
     }
