@@ -66,4 +66,16 @@ class MovementSystemTDDTest {
         assertEquals(0.8f, actual.second, 0.001f)
         assertEquals(0f, actual.third, 0.001f)
     }
+
+    @Test
+    fun `step position ignores non positive speed`() {
+        val current = Vec3(0f, 0f, 0f)
+        val target = Vec3(10f, 0f, 0f)
+
+        val resultZero = MovementSystem.stepPosition(current, target, speed = 0f, dt = 1f)
+        assertEquals(current, resultZero, "zero speed should leave the unit stationary")
+
+        val resultNegative = MovementSystem.stepPosition(current, target, speed = -5f, dt = 1f)
+        assertEquals(current, resultNegative, "negative speed should not move the unit")
+    }
 }

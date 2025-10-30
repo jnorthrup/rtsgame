@@ -17,7 +17,7 @@ data class PerceptionData(
     val pos: Vec3,
     val allies: Indexed<Join<EntityId, Float>>,  // (id, distance) pairs
     val enemies: Indexed<Join<EntityId, Float>>,
-    val resources: Indexed<Join<Vec3, Float>>,  // (position, distance) pairs
+    val resources: Indexed<Join<EntityId, Float>>,  // (resourceId, distance) pairs
     val threat: Int
 )
 
@@ -83,9 +83,9 @@ object Tactics {
 
         val resourcesList = world.asSequence()
             .filter { (_, ent): Map.Entry<EntityId, Entity> -> ent["type"] == "resource" }
-            .mapNotNull { (_, ent): Map.Entry<EntityId, Entity> ->
+            .mapNotNull { (resourceId, ent): Map.Entry<EntityId, Entity> ->
                 ent.get<Pos>("pos")?.vec?.let { resourcePos ->
-                    Join(resourcePos, pos.dist(resourcePos))
+                    Join(resourceId, pos.dist(resourcePos))
                 }
             }
             .sortedBy { it.r }
@@ -139,8 +139,8 @@ object Tactics {
         if (perception.resources.size == 0) return@gatherLbl null
 
         val nearestResource = perception.resources.play[0]
-        val resourcePos = nearestResource.l
-        Cmd.Move(perception.id, resourcePos)
+        val resourceId = nearestResource.l
+        Cmd.Gather(perception.id, resourceId)
     }
 }
 

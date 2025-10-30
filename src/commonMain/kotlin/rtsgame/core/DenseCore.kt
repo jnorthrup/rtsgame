@@ -32,6 +32,7 @@ sealed class Cmd {
     data class Attack(val from: EntityId, val to: EntityId) : Cmd()
     data class Build(val type: String, val pos: Vec3) : Cmd()
     data class Spawn(val type: String, val team: Int, val pos: Vec3) : Cmd()
+    data class Gather(val id: EntityId, val resourceId: EntityId) : Cmd()
 }
 
 // Effects as monadic transformations
@@ -75,38 +76,39 @@ object Game {
         { world ->
             when (cmd) {
                 is Cmd.Move -> world.update(cmd.id) { entity ->
-                    val currentPos = entity.get<Pos>("pos")?.vec ?: Vec3(0f, 0f, 0f)
-                    val speed = 10f // units per second, TODO: make configurable
-                    
-                    // Calculate direction and velocity
-                    val dx = cmd.pos.first - currentPos.first
-                    val dy = cmd.pos.second - currentPos.second
-                    val dz = cmd.pos.third - currentPos.third
-                    val distance = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
-                    
-                    if (distance < 0.1f) {
-                        // Already at target, just update position
+                    val existingPos = entity.get<Pos>("pos")
+                    if (existingPos == null) {
+                        // Entity has no position, set it directly to target
                         entity.plusEntry("pos" to Pos(cmd.pos))
                     } else {
-                        val velocity = Vec3(
-                            dx / distance * speed,
-                            dy / distance * speed,
-                            dz / distance * speed
-                        )
-                        entity
-                            .plusEntry("target" to Target(cmd.pos))
-                            .plusEntry("vel" to Vel(velocity))
+                        val currentPos = existingPos.vec
+                        val speed = 10f // units per second, TODO: make configurable
+                        
+                        // Calculate direction and velocity
+                        val dx = cmd.pos.first - currentPos.first
+                        val dy = cmd.pos.second - currentPos.second
+                        val dz = cmd.pos.third - currentPos.third
+                        val distance = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+                        
+                        if (distance < 0.1f) {
+                            // Already at target, just update position
+                            entity.plusEntry("pos" to Pos(cmd.pos))
+                        } else {
+                            val velocity = Vec3(
+                                dx / distance * speed,
+                                dy / distance * speed,
+                                dz / distance * speed
+                            )
+                            entity
+                                .plusEntry("target" to Target(cmd.pos))
+                                .plusEntry("vel" to Vel(velocity))
+                        }
                     }
                 } to Unit
                 
                 is Cmd.Attack -> {
-                    val damage = world[cmd.from]?.get<Dmg>("dmg")?.value ?: 0f
-                    world.update(cmd.to) { target ->
-                        val hp = target.get<HP>("hp") ?: HP(100f to 100f)
-                        val newHp = hp.value.first - damage
-                        if (newHp <= 0) target - "hp"
-                        else target.plusEntry("hp" to HP(newHp to hp.value.second))
-                    } to Unit
+                    val combatResult = CombatSystem.performAttack(world, cmd.from, cmd.to)
+                    combatResult.updatedWorld to Unit
                 }
                 
                 is Cmd.Build -> {
@@ -130,6 +132,11 @@ object Game {
                         "range" to Range(50f)
                     )
                     world.plusWorldEntry(newId to unit) to Unit
+                }
+                
+                is Cmd.Gather -> {
+                    val gatherResult = ResourceSystem.performGather(world, cmd.id, cmd.resourceId)
+                    gatherResult.updatedWorld to Unit
                 }
             }
         }
@@ -250,6 +257,7 @@ object DenseCodec {
         is Cmd.Attack -> byteArrayOf(1) + from.toVarInt() + to.toVarInt()
         is Cmd.Build -> byteArrayOf(2) + type.toBytes() + pos.toBytes()
         is Cmd.Spawn -> byteArrayOf(3) + type.toBytes() + team.toVarInt() + pos.toBytes()
+        is Cmd.Gather -> byteArrayOf(4) + id.toVarInt() + resourceId.toVarInt()
     }
     
     fun ByteArray.decodeCmd(): Cmd? = try {
@@ -280,6 +288,12 @@ object DenseCodec {
                 offset += len2
                 val pos = readVec3(offset)
                 Cmd.Spawn(type, team, pos)
+            }
+            4.toByte() -> {
+                val (id, len1) = readVarInt(offset)
+                offset += len1
+                val (resourceId, _) = readVarInt(offset)
+                Cmd.Gather(id, resourceId)
             }
             else -> null
         }

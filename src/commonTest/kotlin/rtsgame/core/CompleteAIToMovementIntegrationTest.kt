@@ -46,6 +46,7 @@ class CompleteAIToMovementIntegrationTest {
             aiTargetPosition, 
             gridMap
         )
+        println("intelligentPath=$intelligentPath")
         
         // STEP 4: MovementSystem uses generated path for movement prediction
         val futurePosition = intelligentPath?.let { path ->
@@ -66,10 +67,12 @@ class CompleteAIToMovementIntegrationTest {
         
         // Verify path avoids obstacles
         val pathAvoidanceCheck = intelligentPath.none { pos ->
-            val gridX = (pos.x / 10).toInt() * 10
-            val gridY = (pos.y / 10).toInt() * 10
-            obstacles.contains(Join(gridX, gridY))
+            obstacles.contains(Join(pos.x.toInt(), pos.y.toInt()))
         }
+        val offendingCells = intelligentPath.filter { pos ->
+            obstacles.contains(Join(pos.x.toInt(), pos.y.toInt()))
+        }
+        println("offendingCells=$offendingCells")
         assertTrue(pathAvoidanceCheck, "AI-generated path should avoid obstacles")
         
         assertNotNull(futurePosition, "MovementSystem should predict future position")
@@ -153,6 +156,7 @@ class CompleteAIToMovementIntegrationTest {
             targetPosition,
             initialGridMap
         )
+        println("initialPath=$initialPath")
         
         // STEP 3: Add new obstacles that block current path
         val newObstacles = initialObstacles + setOf(
@@ -165,6 +169,7 @@ class CompleteAIToMovementIntegrationTest {
             initialPath ?: emptyList(),
             updatedGridMap
         )
+        println("recalculatedPath=$recalculatedPath")
         
         // VALIDATE: Dynamic pathfinding
         assertNotNull(initialPath, "Should generate initial path")
@@ -176,10 +181,10 @@ class CompleteAIToMovementIntegrationTest {
         
         // Both paths should avoid their respective obstacle sets
         val initialPathValid = initialPath.none { pos ->
-            initialObstacles.contains(Join((pos.x / 10).toInt() * 10, (pos.y / 10).toInt() * 10))
+            initialObstacles.contains(Join(pos.x.toInt(), pos.y.toInt()))
         }
         val recalculatedPathValid = recalculatedPath.none { pos ->
-            newObstacles.contains(Join((pos.x / 10).toInt() * 10, (pos.y / 10).toInt() * 10))  
+            newObstacles.contains(Join(pos.x.toInt(), pos.y.toInt()))  
         }
         
         assertTrue(initialPathValid, "Initial path should avoid initial obstacles")

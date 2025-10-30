@@ -103,18 +103,20 @@ class CommandSystemPathfinderIntegrationTDDTest {
         // Create maze-like obstacles
         val obstacles = (0..99).map { x ->
             listOf(Join(x, 40), Join(x, 41), Join(x, 42))
-        }.flatten().toSet() - setOf(Join(50, 40)) // Leave one gap
+        }.flatten().toSet() - setOf(Join(50, 40), Join(50, 41), Join(50, 42)) // Leave a vertical gap
         
         val gridMap = createGridMap(100, 100, obstacles)
         
         // RED EXPECTATION: This will FAIL - no MovementSystem pathfinding integration
         val movementPath = CommandSystem.generatePathForMovement(startPos, targetPos, gridMap)
+        println("movementPath=$movementPath")
         val futurePosition = MovementSystem.predictPositionAlongPath(
             current = rtsgame.core.Position(startPos.x, startPos.y),
             velocity = Vec3(5f, 5f, 0f),
             path = movementPath?.map { rtsgame.core.Position(it.x, it.y) } ?: emptyList(),
             predictionTime = 10f
         )
+        println("futurePosition=$futurePosition")
         
         // Verify MovementSystem uses pathfinding
         assertNotNull(movementPath, "Should generate path for movement")
@@ -146,7 +148,10 @@ class CommandSystemPathfinderIntegrationTDDTest {
         val initialPath = CommandSystem.generatePathForMovement(startPos, targetPos, initialGridMap)
         
         // Add new obstacles that block the current path
-        val newObstacles = initialObstacles + setOf(Join(43, 0), Join(44, 0), Join(45, 0))
+        val newObstacles = initialObstacles + setOf(
+            Join(43, 0), Join(44, 0), Join(45, 0),
+            Join(43, 1), Join(44, 1), Join(45, 1)
+        )
         val updatedGridMap = createGridMap(200, 200, newObstacles)
         
         val recalculatedPath = CommandSystem.recalculatePathWithObstacles(

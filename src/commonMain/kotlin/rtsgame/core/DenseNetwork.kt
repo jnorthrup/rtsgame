@@ -357,6 +357,7 @@ object NetCodec {
         is Cmd.Attack -> ByteBuilder().apply { add(1.toByte()); addAll(from.toVarInt()); addAll(to.toVarInt()) }.toByteArray()
         is Cmd.Build -> ByteBuilder().apply { add(2.toByte()); addAll(type.encodeToByteArray()); addAll(pos.toBytes()) }.toByteArray()
         is Cmd.Spawn -> ByteBuilder().apply { add(3.toByte()); addAll(type.encodeToByteArray()); addAll(team.toVarInt()); addAll(pos.toBytes()) }.toByteArray()
+        is Cmd.Gather -> ByteBuilder().apply { add(4.toByte()); addAll(id.toVarInt()); addAll(resourceId.toVarInt()) }.toByteArray()
     }
 }
 

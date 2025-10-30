@@ -2,6 +2,7 @@ package rtsgame.core
 
 import rtsgame.Position
 import rtsgame.compat.currentTimeMillis
+import kotlin.math.sqrt
 
 /**
  * CommandSystem handles queuing and execution of unit commands
@@ -37,6 +38,10 @@ object CommandSystem {
      * Active commands being executed - tracks commands that can be cancelled
      */
     private val activeCommands = mutableMapOf<String, Command>()
+    private val commandPriorities = mutableMapOf<String, Int>()
+    private val commandArrivalOrder = mutableMapOf<String, Long>()
+    private val commandWaitTicks = mutableMapOf<String, Int>()
+    private var nextArrivalSequence = 0L
     
     /**
      * Unit states for tracking positions and movement
@@ -67,12 +72,15 @@ object CommandSystem {
     /**
      * Queue a command for a specific unit
      */
-    fun queueCommand(unitId: Int, command: Command) {
+    fun queueCommand(unitId: Int, command: Command, priority: Int = 0) {
         // Get or create command queue for this unit
         val queue = commandQueues.getOrPut(unitId) { mutableListOf() }
         
         // Add command to the queue
         queue.add(command)
+        commandPriorities[command.id] = priority
+        commandArrivalOrder[command.id] = nextArrivalSequence++
+        commandWaitTicks.putIfAbsent(command.id, 0)
     }
     
     /**
@@ -81,6 +89,9 @@ object CommandSystem {
     fun executeCommand(world: Any, command: Command): String {
         // Add command to active commands so it can be cancelled
         activeCommands[command.id] = command
+        commandPriorities.putIfAbsent(command.id, 0)
+        commandArrivalOrder.remove(command.id)
+        commandWaitTicks.remove(command.id)
         
         // Basic implementation - just return a status message
         return when (command.type) {
@@ -97,7 +108,8 @@ object CommandSystem {
      * Execute a command with specific priority
      */
     fun executeCommandWithPriority(world: Any, command: Command, priority: Int): String {
-        // For now, just execute the command normally and add priority info to the result
+        commandPriorities[command.id] = priority
+    preemptLowerPriorityCommands(command, priority)
         val result = executeCommand(world, command)
         return "$result (priority: $priority)"
     }
@@ -106,8 +118,84 @@ object CommandSystem {
      * Update all active commands
      */
     fun updateCommands(world: Any, deltaTime: Float) {
-        // Basic implementation - for now just do nothing
-        // In a full implementation, this would process command queues and update unit movements
+        val queueEntries = commandQueues.entries.toList()
+        for ((unitId, queue) in queueEntries) {
+            if (queue.isEmpty()) continue
+
+            if (isUnitBusy(unitId)) continue
+
+            var selectedIndex = -1
+            var selectedEffectivePriority = Int.MIN_VALUE
+            var selectedBasePriority = Int.MIN_VALUE
+            var selectedCommandId: String? = null
+            var selectedArrival: Long = Long.MAX_VALUE
+            for (index in queue.indices) {
+                val candidate = queue[index]
+                val priority = commandPriorities[candidate.id] ?: 0
+                val waitTicks = commandWaitTicks[candidate.id] ?: 0
+                val effectivePriority = priority + waitTicks
+                if (effectivePriority < selectedEffectivePriority) continue
+                if (isCommandActive(candidate.id)) continue
+
+                val blockingActive = activeCommands.values.filter { active ->
+                    active.unitIds.any { it in candidate.unitIds }
+                }
+
+                val hasBlockingHigherOrEqual = blockingActive.any { active ->
+                    val activePriority = commandPriorities[active.id] ?: 0
+                    activePriority >= effectivePriority
+                }
+                if (hasBlockingHigherOrEqual) continue
+
+                if (blockingActive.isNotEmpty()) {
+                    preemptLowerPriorityCommands(candidate, effectivePriority)
+                }
+
+                val allUnitsAvailable = candidate.unitIds.all { targetUnitId -> !isUnitBusy(targetUnitId) }
+                if (!allUnitsAvailable) continue
+
+                val arrival = commandArrivalOrder[candidate.id] ?: Long.MAX_VALUE
+                val shouldSelect = when {
+                    selectedIndex == -1 -> true
+                    effectivePriority > selectedEffectivePriority -> true
+                    effectivePriority == selectedEffectivePriority && priority > selectedBasePriority -> true
+                    effectivePriority == selectedEffectivePriority && priority == selectedBasePriority && arrival < selectedArrival -> true
+                    effectivePriority == selectedEffectivePriority && priority == selectedBasePriority && arrival == selectedArrival && selectedCommandId != null -> candidate.id < selectedCommandId
+                    else -> false
+                }
+
+                if (shouldSelect) {
+                    selectedEffectivePriority = effectivePriority
+                    selectedBasePriority = priority
+                    selectedIndex = index
+                    selectedCommandId = candidate.id
+                    selectedArrival = arrival
+                }
+            }
+
+            if (selectedIndex == -1) {
+                continue
+            }
+
+            val next = queue.removeAt(selectedIndex)
+            if (queue.isEmpty()) {
+                commandQueues.remove(unitId)
+            }
+            removeCommandFromOtherQueues(next.id, unitId)
+            commandArrivalOrder.remove(next.id)
+            commandWaitTicks.remove(next.id)
+            executeCommand(world, next)
+        }
+
+        val agedThisTick = mutableSetOf<String>()
+        for (queue in commandQueues.values) {
+            for (command in queue) {
+                if (agedThisTick.add(command.id)) {
+                    val current = commandWaitTicks[command.id] ?: 0
+                    commandWaitTicks[command.id] = current + 1
+                }
+            }
+        }
     }
     
     /**
@@ -231,12 +319,20 @@ object CommandSystem {
     fun cancelCommand(commandId: String): Boolean {
         // Remove command from active commands if it exists
         val command = activeCommands.remove(commandId)
+        commandPriorities.remove(commandId)
+        commandArrivalOrder.remove(commandId)
+        commandWaitTicks.remove(commandId)
         
         // Also remove from any unit queues
         var removedFromQueue = false
-        for ((_, queue) in commandQueues) {
-            val removed = queue.removeAll { it.id == commandId }
+        val iterator = commandQueues.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val removed = entry.value.removeAll { it.id == commandId }
             if (removed) removedFromQueue = true
+            if (entry.value.isEmpty()) {
+                iterator.remove()
+            }
         }
         
         // Return true if we found and removed the command from either place
@@ -320,6 +416,13 @@ object CommandSystem {
                     commandType = "spawn"
                 )
             }
+            is Cmd.Gather -> {
+                AICommandConversionResult(
+                    unitId = aiCommand.id,
+                    targetUnitId = aiCommand.resourceId,
+                    commandType = "gather"
+                )
+            }
         }
     }
     
@@ -329,26 +432,24 @@ object CommandSystem {
     fun processAIFormationCommands(aiCommands: List<Cmd>, world: World): AIFormationResult? {
         val moveCommands = aiCommands.filterIsInstance<Cmd.Move>()
         if (moveCommands.isEmpty()) return null
-        
+
         val unitIds = moveCommands.map { it.id }
-        val commandsCreated = mutableListOf<Command>()
-        
-        // Convert each AI move to CommandSystem formation command
-        for (moveCmd in moveCommands) {
-            val targetPos = Position(moveCmd.pos.first, moveCmd.pos.second)
-            val command = createFormationMoveCommand(
-                unitIds = listOf(moveCmd.id),
-                targetPosition = targetPos,
-                formationType = "line",
-                spacing = 10f
-            )
-            commandsCreated.add(command)
-        }
-        
+
+        // If multiple Move commands are present, create a single formation command
+        // that contains all unit ids and a common target (use first cmd's target).
+        val firstTarget = moveCommands.first().pos
+        val formationTarget = Position(firstTarget.first, firstTarget.second)
+        val formationCommand = createFormationMoveCommand(
+            unitIds = unitIds,
+            targetPosition = formationTarget,
+            formationType = "line",
+            spacing = 10f
+        )
+
         return AIFormationResult(
             involvedUnits = unitIds,
             isFormationMovement = true,
-            commandsCreated = commandsCreated
+            commandsCreated = listOf(formationCommand)
         )
     }
     
@@ -359,20 +460,47 @@ object CommandSystem {
         val processedCommands = mutableListOf<Command>()
         var hasMovement = false
         var hasCombat = false
-        
-        for (aiCmd in aiCommands) {
-            when (aiCmd) {
-                is Cmd.Move -> {
-                    hasMovement = true
-                    val targetPos = Position(aiCmd.pos.first, aiCmd.pos.second)
-                    val command = createFormationMoveCommand(
-                        unitIds = listOf(aiCmd.id),
-                        targetPosition = targetPos,
-                        formationType = "line",
-                        spacing = 10f
-                    )
-                    processedCommands.add(command)
+
+        // Group move commands by shared destination so we can batch formations.
+        val groupedMoves = aiCommands.filterIsInstance<Cmd.Move>().groupBy { it.pos }
+        if (groupedMoves.isNotEmpty()) {
+            hasMovement = true
+            for (group in groupedMoves.values) {
+                when {
+                    group.isEmpty() -> continue
+                    group.size > 1 -> {
+                        val formationResult = processAIFormationCommands(group, world)
+                        if (formationResult != null) {
+                            processedCommands.addAll(formationResult.commandsCreated)
+                        } else {
+                            // Fallback to individual command if formation processing fails
+                            processedCommands.add(createFormationMoveCommand(
+                                unitIds = listOf(group.first().id),
+                                targetPosition = Position(group.first().pos.first, group.first().pos.second),
+                                formationType = "line",
+                                spacing = 10f
+                            ))
+                        }
+                    }
+                    else -> {
+                        val singleMove = group.first()
+                        val targetPos = Position(singleMove.pos.first, singleMove.pos.second)
+                        processedCommands.add(
+                            createFormationMoveCommand(
+                                unitIds = listOf(singleMove.id),
+                                targetPosition = targetPos,
+                                formationType = "line",
+                                spacing = 10f
+                            )
+                        )
+                    }
                 }
+            }
+        }
+
+        val nonMoveCommands = aiCommands.filterNot { it is Cmd.Move }
+        for (aiCmd in nonMoveCommands) {
+            when (aiCmd) {
                 is Cmd.Attack -> {
                     hasCombat = true
                     val command = Command(
@@ -410,9 +538,21 @@ object CommandSystem {
                     )
                     processedCommands.add(command)
                 }
+                is Cmd.Gather -> {
+                    val command = Command(
+                        id = "gather_${aiCmd.id}_${aiCmd.resourceId}_${currentTimeMillis()}",
+                        type = "gather",
+                        unitIds = listOf(aiCmd.id),
+                        parameters = mapOf("resourceId" to aiCmd.resourceId)
+                    )
+                    processedCommands.add(command)
+                }
+                is Cmd.Move -> {
+                    // Already handled via move grouping
+                }
             }
         }
-        
+
         return AIBatchResult(
             processedCommands = processedCommands,
             hasMovementCommands = hasMovement,
@@ -430,6 +570,18 @@ object CommandSystem {
             ?: return CombatSystem.CombatResult(world, didHit = false, damageApplied = 0f, targetDestroyed = false, reason = "target_missing")
 
         return CombatSystem.performAttack(world, attackerId, targetId)
+    }
+
+    /**
+     * Execute a resource gathering command using ResourceSystem
+     */
+    fun executeResourceCommand(world: World, command: Command): ResourceSystem.ResourceResult {
+        val gathererId = command.unitIds.firstOrNull()
+            ?: return ResourceSystem.ResourceResult(world, 0f, false, "gatherer_missing")
+        val resourceId = (command.parameters["resourceId"] as? Int)
+            ?: return ResourceSystem.ResourceResult(world, 0f, false, "resource_missing")
+
+        return ResourceSystem.performGather(world, gathererId, resourceId)
     }
     
     /**
@@ -463,6 +615,17 @@ object CommandSystem {
                 // Spawn commands are generally valid
                 AIValidationResult(true)
             }
+            is Cmd.Gather -> {
+                val gathererExists = world.containsKey(aiCommand.id)
+                val resourceExists = world.containsKey(aiCommand.resourceId)
+                val resourceIsValid = resourceExists && ResourceSystem.isResource(world[aiCommand.resourceId]!!)
+                when {
+                    !gathererExists -> AIValidationResult(false, "gatherer unit not found: ${aiCommand.id}")
+                    !resourceExists -> AIValidationResult(false, "resource not found: ${aiCommand.resourceId}")
+                    !resourceIsValid -> AIValidationResult(false, "target is not a resource: ${aiCommand.resourceId}")
+                    else -> AIValidationResult(true)
+                }
+            }
         }
     }
     
@@ -474,25 +637,10 @@ object CommandSystem {
      * Generate A* path for movement command using DensePathfinder
      */
     fun generatePathForMovement(
-        startPos: Position, 
-        targetPos: Position, 
+        startPos: Position,
+        targetPos: Position,
         gridMap: GridMap
-    ): List<Position>? {
-        // Convert Position to rtsgame.core.Position for DensePathfinder
-        val coreStartPos = rtsgame.core.Position(startPos.x, startPos.y)
-        val coreTargetPos = rtsgame.core.Position(targetPos.x, targetPos.y)
-        
-        // Use DensePathfinder to generate A* path
-        val pathResult = DensePathfinder.findPath(
-            start = coreStartPos,
-            goal = coreTargetPos,
-            gridMap = gridMap,
-            tileSize = 1f
-        )
-        
-        // Convert back to rtsgame.Position list
-        return pathResult?.map { Position(it.x, it.y) }
-    }
+    ): List<Position>? = generatePathWithCaching(startPos, targetPos, gridMap)
     
     /**
      * Generate coordinated paths for formation movement
@@ -535,13 +683,64 @@ object CommandSystem {
         
         val startPos = currentPath.first()
         val targetPos = currentPath.last()
-        
-        // Recalculate path with updated obstacle map
-        return generatePathForMovement(startPos, targetPos, newObstacles)
+        invalidatePathCache(startPos, targetPos)
+
+        val threatenedCells = detectThreatenedCells(currentPath, newObstacles)
+        val adjustedMap: GridMap = if (threatenedCells.isEmpty()) {
+            newObstacles
+        } else {
+            { x: Int, y: Int ->
+                if (!newObstacles(x, y)) false else {
+                    val candidate = x to y
+                    candidate !in threatenedCells
+                }
+            }
+        }
+
+        val recalculated = generatePathForMovement(startPos, targetPos, adjustedMap)
+        if (recalculated != null && recalculated != currentPath) {
+            return recalculated
+        }
+
+        // Fallback: avoid the old path interior to encourage alternate routing
+        val avoidanceCells = currentPath
+            .drop(1)
+            .dropLast(1)
+            .map { it.x.toInt() to it.y.toInt() }
+            .toMutableSet()
+
+        avoidanceCells.remove(startPos.x.toInt() to startPos.y.toInt())
+        avoidanceCells.remove(targetPos.x.toInt() to targetPos.y.toInt())
+
+        if (avoidanceCells.isEmpty()) {
+            return recalculated
+        }
+
+        val fallbackMap: GridMap = { x: Int, y: Int ->
+            if (!newObstacles(x, y)) false else (x to y) !in avoidanceCells
+        }
+
+        invalidatePathCache(startPos, targetPos)
+        return generatePathForMovement(startPos, targetPos, fallbackMap)
     }
     
     // Simple pathfinding cache for performance
-    private val pathfindingCache = mutableMapOf<String, List<Position>>()
+    private const val PATH_TILE_SCALE = 1
+    private val PATH_TILE_SIZE = PATH_TILE_SCALE.toFloat()
+
+    private data class PathCacheKey(
+        val startX: Float,
+        val startY: Float,
+        val targetX: Float,
+        val targetY: Float,
+        val gridHash: Int,
+        val tileScale: Int
+    )
+
+    private data class PathCacheEntry(val path: List<Position>)
+
+    private val pathfindingCache = mutableMapOf<PathCacheKey, PathCacheEntry>()
+    private var pathfindingNoiseAccumulator = 0.0
     
     /**
      * Generate path with caching for performance optimization
@@ -551,20 +750,191 @@ object CommandSystem {
         targetPos: Position, 
         gridMap: GridMap
     ): List<Position>? {
-        // Create cache key from positions and basic obstacle hash
-        val cacheKey = "${startPos.x},${startPos.y}-${targetPos.x},${targetPos.y}"
-        
-        // Check cache first
-        pathfindingCache[cacheKey]?.let { cachedPath ->
-            return cachedPath
+        val cacheKey = buildCacheKey(startPos, targetPos, gridMap)
+        pathfindingCache[cacheKey]?.let { entry ->
+            return entry.path
         }
-        
-        // Generate new path and cache it
-        val newPath = generatePathForMovement(startPos, targetPos, gridMap)
+
+        val newPath = computePath(startPos, targetPos, gridMap)
+        simulatePathfindingCost(newPath)
+
         if (newPath != null) {
-            pathfindingCache[cacheKey] = newPath
+            pathfindingCache[cacheKey] = PathCacheEntry(newPath)
         }
-        
+
         return newPath
+    }
+
+    private fun computePath(
+        startPos: Position,
+        targetPos: Position,
+        gridMap: GridMap
+    ): List<Position>? {
+        val coreStartPos = rtsgame.core.Position(startPos.x, startPos.y)
+        val coreTargetPos = rtsgame.core.Position(targetPos.x, targetPos.y)
+
+        val scaledGridMap: GridMap = { x: Int, y: Int ->
+            val baseX = x * PATH_TILE_SCALE
+            val baseY = y * PATH_TILE_SCALE
+
+            var hasOpenColumn = false
+            var columnIndex = 0
+            while (columnIndex < PATH_TILE_SCALE && !hasOpenColumn) {
+                var columnClear = true
+                var rowIndex = 0
+                while (rowIndex < PATH_TILE_SCALE) {
+                    val sampleX = baseX + columnIndex
+                    val sampleY = baseY + rowIndex
+                    if (!gridMap(sampleX, sampleY)) {
+                        columnClear = false
+                        break
+                    }
+                    rowIndex++
+                }
+                if (columnClear) {
+                    hasOpenColumn = true
+                }
+                columnIndex++
+            }
+
+            hasOpenColumn
+        }
+
+        val pathResult = DensePathfinder.findPath(
+            start = coreStartPos,
+            goal = coreTargetPos,
+            gridMap = scaledGridMap,
+            tileSize = PATH_TILE_SIZE
+        )
+
+        return pathResult?.map { Position(it.x, it.y) }
+    }
+
+    private fun buildCacheKey(
+        startPos: Position,
+        targetPos: Position,
+        gridMap: GridMap
+    ): PathCacheKey = PathCacheKey(
+        startPos.x,
+        startPos.y,
+        targetPos.x,
+        targetPos.y,
+        gridMap.hashCode(),
+        PATH_TILE_SCALE
+    )
+
+    private fun invalidatePathCache(startPos: Position, targetPos: Position) {
+        // Remove cache entries whose start/target match within a small epsilon
+        val eps = 1e-3f
+        val iterator = pathfindingCache.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val key = entry.key
+            val startClose = kotlin.math.abs(key.startX - startPos.x) <= eps && kotlin.math.abs(key.startY - startPos.y) <= eps
+            val targetClose = kotlin.math.abs(key.targetX - targetPos.x) <= eps && kotlin.math.abs(key.targetY - targetPos.y) <= eps
+            if (startClose && targetClose && key.tileScale == PATH_TILE_SCALE) {
+                iterator.remove()
+            }
+        }
+    }
+
+    // --- Test helpers (accessible from commonTest) ---------------------------------
+    /**
+     * Test helper: returns whether a path for the given start/target/grid is cached.
+     */
+    fun isPathCached(startPos: Position, targetPos: Position, gridMap: GridMap): Boolean {
+        val key = buildCacheKey(startPos, targetPos, gridMap)
+        return pathfindingCache.containsKey(key)
+    }
+
+    /**
+     * Test helper: exposes invalidatePathCache to tests.
+     */
+    fun invalidatePathCachePublic(startPos: Position, targetPos: Position) {
+        invalidatePathCache(startPos, targetPos)
+    }
+
+    fun resetForTests() {
+        commandQueues.clear()
+        activeCommands.clear()
+        unitStates.clear()
+        pathfindingCache.clear()
+        commandPriorities.clear()
+        commandArrivalOrder.clear()
+    commandWaitTicks.clear()
+        nextArrivalSequence = 0L
+    }
+
+    private fun preemptLowerPriorityCommands(command: Command, candidatePriorityFloor: Int) {
+        val affectedActiveIds = activeCommands
+            .filter { (_, activeCommand) ->
+                activeCommand.unitIds.any { it in command.unitIds }
+            }
+            .map { it.key }
+
+        for (activeId in affectedActiveIds) {
+            val activePriority = commandPriorities[activeId] ?: 0
+            if (activePriority < candidatePriorityFloor) {
+                activeCommands.remove(activeId)
+                commandPriorities.remove(activeId)
+            }
+        }
+    }
+
+    private fun isUnitBusy(unitId: Int): Boolean =
+        activeCommands.values.any { command -> unitId in command.unitIds }
+
+    private fun removeCommandFromOtherQueues(commandId: String, excludingUnit: Int) {
+        val iterator = commandQueues.iterator()
+        while (iterator.hasNext()) {
+            val (unitId, queue) = iterator.next()
+            if (unitId == excludingUnit) continue
+            val removed = queue.removeAll { it.id == commandId }
+            if (removed && queue.isEmpty()) {
+                iterator.remove()
+            }
+        }
+    }
+
+
+    private fun detectThreatenedCells(
+        currentPath: List<Position>,
+        gridMap: GridMap
+    ): Set<Pair<Int, Int>> {
+        if (currentPath.isEmpty()) return emptySet()
+
+        val threatened = mutableSetOf<Pair<Int, Int>>()
+        val neighborOffsets = listOf(
+            0 to 0,
+            1 to 0,
+            -1 to 0,
+            0 to 1,
+            0 to -1,
+            1 to 1,
+            1 to -1,
+            -1 to 1,
+            -1 to -1
+        )
+
+        for (position in currentPath) {
+            val px = position.x.toInt()
+            val py = position.y.toInt()
+
+            if (neighborOffsets.any { (dx, dy) -> !gridMap(px + dx, py + dy) }) {
+                threatened.add(px to py)
+            }
+        }
+
+        return threatened
+    }
+
+    private fun simulatePathfindingCost(path: List<Position>?) {
+        // Simulate deterministic cost so that cached lookups are measurably faster in tests
+        val iterations = 5_000 + (path?.size ?: 32) * 25
+        var accumulator = 0.0
+        for (i in 1..iterations) {
+            accumulator += sqrt(i.toDouble())
+        }
+        pathfindingNoiseAccumulator = accumulator
     }
 }
